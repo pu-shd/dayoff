@@ -1,0 +1,440 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <base target="_top" />
+    <style>
+      :root {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        color: #182c2b;
+        background: #f4f6f3;
+        font-size: 16px;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+      }
+      main {
+        max-width: 1120px;
+        margin: 0 auto;
+        padding: 32px 20px;
+      }
+      header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 20px;
+      }
+      h1 {
+        font-size: 34px;
+        letter-spacing: -1px;
+        margin: 0;
+      }
+      h2 {
+        font-size: 21px;
+        margin: 0 0 18px;
+      }
+      p {
+        line-height: 1.6;
+      }
+      .muted,
+      small {
+        color: #526763;
+      }
+      .eyebrow {
+        font-size: 12px;
+        letter-spacing: 2px;
+        text-transform: uppercase;
+        color: #527269;
+        margin: 0 0 8px;
+      }
+      .badge {
+        background: #e6ece4;
+        border-radius: 20px;
+        padding: 8px 14px;
+        font-size: 13px;
+      }
+      .panel {
+        background: white;
+        border: 1px solid #dce3dc;
+        border-radius: 14px;
+        padding: 24px;
+        margin-top: 22px;
+      }
+      .cards {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 14px;
+        margin-top: 24px;
+      }
+      .card {
+        background: #183f36;
+        color: #fff;
+        border-radius: 12px;
+        padding: 22px;
+      }
+      .card span {
+        display: block;
+        color: #c9ddd4;
+      }
+      .card strong {
+        display: block;
+        font-size: 34px;
+        font-weight: 500;
+        margin: 12px 0;
+      }
+      .card small {
+        color: #c9ddd4;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 16px;
+      }
+      label {
+        display: block;
+        font-size: 14px;
+        font-weight: 600;
+      }
+      input,
+      select {
+        display: block;
+        width: 100%;
+        margin-top: 7px;
+        padding: 11px;
+        border: 1px solid #aebeb6;
+        border-radius: 7px;
+        background: #fff;
+        font: inherit;
+      }
+      button,
+      .button {
+        display: inline-block;
+        border: 1px solid #1d5746;
+        border-radius: 7px;
+        background: #1d5746;
+        color: white;
+        padding: 11px 15px;
+        font: inherit;
+        cursor: pointer;
+        text-decoration: none;
+      }
+      button.secondary {
+        background: white;
+        color: #1d5746;
+      }
+      button.danger {
+        background: white;
+        color: #933a32;
+        border-color: #d5b9b4;
+      }
+      button:disabled {
+        opacity: 0.5;
+        cursor: wait;
+      }
+      .actions {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-top: 18px;
+      }
+      .status {
+        padding: 14px 18px;
+        border-radius: 8px;
+        background: #edf1d9;
+        white-space: pre-wrap;
+        line-height: 1.5;
+        margin-top: 18px;
+      }
+      .error {
+        background: #fae9e4;
+        color: #802e25;
+      }
+      .table-wrap {
+        overflow: auto;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        text-align: left;
+        font-size: 14px;
+      }
+      th,
+      td {
+        padding: 14px 10px;
+        border-bottom: 1px solid #e4e9e3;
+        vertical-align: top;
+      }
+      th {
+        font-size: 12px;
+        color: #526763;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+      td button {
+        font-size: 12px;
+        padding: 7px 9px;
+        margin: 0 6px 6px 0;
+      }
+      pre {
+        white-space: pre-wrap;
+        font: inherit;
+        line-height: 1.6;
+      }
+      a {
+        color: #1d5746;
+      }
+      .hide {
+        display: none !important;
+      }
+      footer {
+        margin: 28px 0;
+        color: #526763;
+        font-size: 13px;
+      }
+      @media (max-width: 650px) {
+        main {
+          padding: 24px 14px;
+        }
+        .cards {
+          grid-template-columns: 1fr;
+        }
+        .grid {
+          grid-template-columns: 1fr;
+        }
+        .panel {
+          padding: 18px;
+        }
+        header {
+          align-items: flex-start;
+        }
+        .card strong {
+          font-size: 30px;
+        }
+      }
+      @media print {
+        button,
+        form,
+        #setup,
+        .actions {
+          display: none !important;
+        }
+        .panel {
+          break-inside: avoid;
+        }
+        body {
+          background: white;
+        }
+        .card {
+          color: #182c2b;
+          background: white;
+          border: 1px solid;
+        }
+        .card span,
+        .card small {
+          color: #526763;
+        }
+      }
+    </style>
+    <title>Dayoff</title>
+  </head>
+  <body>
+    <main>
+      <header>
+        <div>
+          <p class="eyebrow">A little less administration</p>
+          <h1>Dayoff</h1>
+          <p id="subtitle" class="muted">
+            Your leave, calendar, and CALM checklist.
+          </p>
+        </div>
+        <span id="mode" class="badge">Loading</span>
+      </header>
+      <div id="message" class="status" role="status" aria-live="polite">
+        Connecting to your private ledger…
+      </div>
+      <div id="setup" class="panel hide">
+        <h2>Start your private record</h2>
+        <p>
+          This creates a Google Sheet owned by your account and imports the
+          configured monthly workbook totals. It sends no emails and creates no
+          calendar events.
+        </p>
+        <button id="initialize">Create private ledger</button>
+      </div>
+      <div id="content" class="hide">
+        <div class="cards" id="cards"></div>
+        <section class="panel">
+          <h2>Request time off</h2>
+          <p class="muted">
+            Full day: <span id="full"></span> hours · Half day:
+            <span id="half"></span> hours. Partial days deduct the configured
+            lunch overlap.
+          </p>
+          <form id="request-form">
+            <div class="grid">
+              <label
+                >Leave type<select name="category">
+                  <option value="vacation">Vacation</option>
+                  <option value="sick">Sick</option>
+                  <option value="personal">Personal</option>
+                  <option value="other">Other (tracked, no allowance)</option>
+                </select></label
+              >
+              <label
+                >Length<select name="mode" id="length">
+                  <option value="full">Full day(s)</option>
+                  <option value="half">Half day(s), fixed charge</option>
+                  <option value="partial">
+                    Partial day(s), calculated hours
+                  </option>
+                </select></label
+              >
+              <label
+                >First date<input type="date" name="first" required /></label
+              ><label
+                >Last date<input type="date" name="last" required
+              /></label>
+              <label class="timed hide"
+                >Absent from<input
+                  type="time"
+                  name="start"
+                  value="08:45" /></label
+              ><label class="timed hide"
+                >Absent until<input type="time" name="end" value="11:00"
+              /></label>
+            </div>
+            <p class="muted">
+              <small
+                >Weekends and configured holidays are excluded. For half days,
+                enter the actual absence interval; the charge stays
+                fixed.</small
+              >
+            </p>
+            <button type="submit">Preview request</button>
+          </form>
+          <div id="preview" class="hide">
+            <pre id="preview-text"></pre>
+            <p id="recipient"></p>
+            <button id="send">
+              Record, add to calendar &amp; email management
+            </button>
+          </div>
+        </section>
+        <section class="panel">
+          <h2>Your record</h2>
+          <p id="record-note" class="muted"></p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Date / month</th>
+                  <th>Leave</th>
+                  <th>Hours</th>
+                  <th>Progress</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="records"></tbody>
+            </table>
+          </div>
+          <div class="actions">
+            <button class="secondary" id="export">Export details CSV</button
+            ><button class="secondary" id="export-summary">
+              Export balances CSV</button
+            ><a id="ledger" class="button" target="_blank" rel="noopener"
+              >Open private ledger</a
+            >
+          </div>
+        </section>
+        <section class="panel">
+          <h2>CALM reminders</h2>
+          <p>
+            One weekday email lists outstanding entries and corrections. Opening
+            a link never marks a request entered. Review the record here and
+            confirm after updating CALM.
+          </p>
+          <p id="reminder-status" class="muted"></p>
+          <div class="actions">
+            <button id="install" class="secondary">
+              Enable daily reminders</button
+            ><button id="stop" class="secondary">Stop reminders</button>
+          </div>
+        </section>
+      </div>
+      <footer>
+        CALM remains the official record. These are your personal calculations.
+        Imported monthly summaries do not imply CALM verification.
+      </footer>
+    </main>
+    <script>
+      'use strict';
+      const focus = <?!= focus ?>;
+      let state, pendingInput;
+      const $ = id => document.getElementById(id);
+      const money = n => (n / 100).toFixed(2);
+      function rpc(name, ...args) { return new Promise((resolve,reject) => google.script.run.withSuccessHandler(resolve).withFailureHandler(reject)[name](...args)); }
+      function message(text,error=false) { $('message').textContent=text; $('message').className='status'+(error?' error':''); }
+      function busy(value) { document.querySelectorAll('button').forEach(b=>b.disabled=value); }
+      async function action(name,...args) {
+       busy(true);
+       try { render(await rpc(name,state.nonce,...args));message('Saved.'); }
+       catch(e) { message(e.message||'Unable to complete the action.',true);try{const s=await rpc('getDashboard');render(s);}catch{ /* keep the original error visible */ } }
+       finally { busy(false); }
+      }
+      function text(tag,value){const node=document.createElement(tag);node.textContent=value;return node;}
+      function button(label,callback,cls='secondary'){const b=text('button',label);b.className=cls;b.type='button';b.addEventListener('click',callback);return b;}
+      function render(s) {
+       state=s;$('mode').textContent=s.config.delivery==='disabled'?'Preview mode':'Live';
+       $('subtitle').textContent=s.config.displayName+' · FY'+s.config.fiscalYear+' · balances as of '+s.today;
+       $('setup').classList.toggle('hide',s.initialized);$('content').classList.toggle('hide',!s.initialized);
+       $('cards').replaceChildren();
+       for(const [key,label] of [['vacation','Vacation'],['sick','Sick'],['personal','Personal']]){
+       const card=text('div','');card.className='card';card.append(text('span',label+' available now'),text('strong',money(s.totals.available[key])+' h'),text('small',money(s.totals.used[key])+' used · '+money(s.totals.planned[key])+' planned · '+money(s.totals.projected[key])+' projected at FY end'));$('cards').append(card);
+       }
+       $('full').textContent=money(s.config.policy.fullDay);$('half').textContent=money(s.config.policy.halfDay);
+       $('ledger').href=s.ledgerUrl;
+       $('recipient').textContent='Management: '+s.config.managementEmails.join(', ');
+       $('send').classList.toggle('hide',s.config.delivery==='disabled');
+       $('record-note').textContent='Imported entries are monthly totals assigned to month-end, so balances within an imported month are approximate. Avoid re-entering absences already included in those totals.';
+       $('reminder-status').textContent=s.remindersInstalled?'Reminders enabled; delivery around '+s.config.reminderHour+':00 '+s.config.timeZone+'.':'Reminders are off.';
+       $('install').classList.toggle('hide',s.config.delivery==='disabled'||s.remindersInstalled);
+       $('stop').classList.toggle('hide',!s.remindersInstalled);
+       const tbody=$('records');tbody.replaceChildren();
+       for(const r of [...s.records].sort((a,b)=>b.days[0].date.localeCompare(a.days[0].date))){
+       const row=document.createElement('tr'), day=r.days[0];
+       row.append(text('td',r.legacy?day.date.slice(0,7)+' (monthly)':day.date+(r.days.length>1?' – '+r.days.at(-1).date:'')),text('td',r.input.category+(r.status==='cancelled'?' · cancelled':'')),text('td',money(r.days.reduce((n,d)=>n+d.hours,0))));
+       row.append(text('td',r.legacy?'Historical; CALM unverified':'CALM: '+r.calm+' · Calendar: '+r.calendar+' · Email: '+r.email));
+       const actions=document.createElement('td');
+       if(!r.legacy){
+       if(r.calm==='correction'||r.status==='active'&&r.calm==='pending')actions.append(button(r.calm==='correction'?'Confirm CALM corrected':'Confirm entered in CALM',()=>{if(confirm('Have you '+(r.calm==='correction'?'corrected':'entered')+' these dates and hours in CALM?'))action('confirmCalm',r.id,r.version);}));
+       if(r.calendar==='pending'||r.email==='pending')actions.append(button('Retry incomplete steps',()=>action('retryRequest',r.id)));
+       if(r.email==='unknown'||r.email==='sending')actions.append(button('Email appears in Sent',()=>{if(confirm('Confirm that the management email appears in your Sent mail.'))action('resolveEmail',r.id,r.version,true);}));
+       if(r.status==='active')actions.append(button('Cancel request',()=>{if(confirm('Cancel this request, remove its calendar events and email management? CALM correction will remain on your checklist if needed.'))action('cancelRequest',r.id,r.version);},'danger'));
+       }
+       row.append(actions);tbody.append(row);
+       if(focus.id===r.id){row.style.background='#edf1d9';if(String(r.version)!==focus.version)message('This reminder refers to an earlier revision. Review the latest record before confirming.');}
+       }
+      }
+      $('length').addEventListener('change',()=>{document.querySelectorAll('.timed').forEach(e=>e.classList.toggle('hide',$('length').value==='full'));pendingInput=null;$('preview').classList.add('hide');});
+      $('request-form').addEventListener('input',()=>{pendingInput=null;$('preview').classList.add('hide');});
+      $('request-form').addEventListener('submit',async e=>{
+       e.preventDefault();busy(true);pendingInput={...Object.fromEntries(new FormData(e.target)),id:crypto.randomUUID()};
+       try {
+       const r=await rpc('preview',pendingInput);$('preview-text').textContent=r.days.map(d=>d.date+' · '+(d.allDay?'All day':d.start+'–'+d.end)+' · '+money(d.hours)+' hours').join('\n')+'\n\n'+r.message.subject+'\n'+r.message.body;
+       $('preview').classList.remove('hide');message(state.config.delivery==='disabled'?'Preview only. No record, calendar event or email has been created.':'Review the dates, hours and email before recording.');
+       }catch(err){message(err.message,true);pendingInput=null;}finally{busy(false);}
+      });
+      $('send').addEventListener('click',async()=>{if(pendingInput){await action('createRequest',pendingInput);pendingInput=null;$('preview').classList.add('hide');}});
+      $('initialize').addEventListener('click',()=>action('initialize'));
+      $('install').addEventListener('click',()=>action('installReminders'));
+      $('stop').addEventListener('click',()=>action('stopReminders'));
+      function download(name,body){const a=document.createElement('a'),url=URL.createObjectURL(new Blob([body],{type:'text/csv;charset=utf-8'}));a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
+      $('export').addEventListener('click',async()=>{try{download('dayoff-FY'+state.config.fiscalYear+'-details.csv',await rpc('exportReport'));}catch(e){message(e.message,true);}});
+      $('export-summary').addEventListener('click',()=>{const t=state.totals;const rows=['category,used_hours,planned_hours,available_now_hours,projected_FY_end_hours'];for(const c of ['vacation','sick','personal'])rows.push([c,money(t.used[c]),money(t.planned[c]),money(t.available[c]),money(t.projected[c])].join(','));download('dayoff-FY'+state.config.fiscalYear+'-balances.csv',rows.join('\r\n'));});
+      rpc('getDashboard').then(s=>{render(s);if(!focus.id)message(s.config.delivery==='disabled'?'Preview mode: calendar and email delivery are disabled.':'Ready.');}).catch(e=>message(e.message,true));
+    </script>
+  </body>
+</html>

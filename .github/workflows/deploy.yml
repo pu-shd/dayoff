@@ -1,0 +1,80 @@
+name: Apps Script deployment
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        type: choice
+        options: [deploy, teardown]
+        default: deploy
+        required: true
+      dry_run:
+        type: boolean
+        default: true
+        required: true
+  push:
+    branches: [main]
+    paths:
+      [
+        "src/**",
+        "scripts/**",
+        "config/**",
+        "package*.json",
+        ".github/workflows/deploy.yml",
+      ]
+permissions:
+  contents: read
+concurrency:
+  group: dayoff-deployment
+  cancel-in-progress: false
+jobs:
+  deploy:
+    if: vars.DAYOFF_GITOPS_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    environment: dayoff
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.11.1"
+          cache: npm
+      - name: Install CLI and shell
+        run: |
+          set -euo pipefail
+          npm ci
+          sudo apt-get update -qq
+          sudo apt-get install -y zsh
+      - name: Install docker-compose CLI
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.local/bin"
+          printf '#!/bin/sh\nexec docker compose "$@"\n' > "$HOME/.local/bin/docker-compose"
+          chmod +x "$HOME/.local/bin/docker-compose"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Verify source with generic configuration
+        run: ./scripts/test.sh
+      - name: Restore private configuration
+        env:
+          DAYOFF_CONFIG_JSON: ${{ secrets.DAYOFF_CONFIG_JSON }}
+          DAYOFF_SEED_JSON: ${{ secrets.DAYOFF_SEED_JSON }}
+          CLASP_AUTH_JSON: ${{ secrets.CLASP_AUTH_JSON }}
+          CLASP_PROJECT_JSON: ${{ secrets.CLASP_PROJECT_JSON }}
+          DAYOFF_DEPLOYMENT_ID: ${{ secrets.DAYOFF_DEPLOYMENT_ID }}
+        run: node scripts/restore-ci.mjs
+      - name: Deploy or teardown
+        env:
+          DAYOFF_DEPLOYMENT_ID: ${{ secrets.DAYOFF_DEPLOYMENT_ID }}
+          clasp_config_auth: ${{ runner.temp }}/dayoff-clasp.json
+          OPERATION: ${{ inputs.operation || 'deploy' }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}
+        run: |
+          set -euo pipefail
+          if [ "$DRY_RUN" = true ]; then
+            "./scripts/$([ "$OPERATION" = teardown ] && echo teardown || echo deploy).sh" --dry-run
+          elif [ "$OPERATION" = teardown ]; then
+            ./scripts/teardown.sh "$DAYOFF_DEPLOYMENT_ID"
+          else
+            ./scripts/update.sh
+          fi
+      - name: Remove ephemeral private material
+        if: always()
+        run: node scripts/clean-ci.mjs

@@ -1,0 +1,33 @@
+{
+  "name": "dayoff",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Personal leave tracking with Google Apps Script, Calendar and CALM reminders",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "tsx --test tests/*.test.ts",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "check": "npm run lint && npm run format:check && npm run typecheck && npm test && npm run build"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/google-apps-script": "2.0.15",
+    "@types/node": "24.10.1",
+    "eslint": "10.14.0",
+    "esbuild": "0.25.12",
+    "prettier": "3.6.2",
+    "tsx": "4.20.6",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.72.2",
+    "@google/clasp": "3.4.1"
+  },
+  "overrides": {
+    "minimatch": "11.0.5",
+    "rimraf": "6.1.4",
+    "zod": "4.6.7"
+  }
+}

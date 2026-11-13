@@ -1,0 +1,8 @@
+FROM ghcr.io/astral-sh/uv:0.9.5-python3.13-bookworm-slim
+WORKDIR /app
+ENV PYTHONDONTWRITEBYTECODE=1
+COPY pyproject.toml uv.lock ./
+RUN uv sync --locked
+COPY scripts/import_workbook.py scripts/import_workbook.py
+COPY tests/test_import_workbook.py tests/test_import_workbook.py
+CMD ["sh", "-c", "uv run --frozen ruff check scripts/import_workbook.py tests/test_import_workbook.py && uv run --frozen ruff format --check scripts/import_workbook.py tests/test_import_workbook.py && uv run --frozen mypy scripts/import_workbook.py tests/test_import_workbook.py && uv run --frozen python -m unittest discover -s tests -p 'test_*.py' -v"]

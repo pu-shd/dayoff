@@ -1,0 +1,36 @@
+{
+  "fiscalYear": 2027,
+  "timeZone": "America/New_York",
+  "displayName": "Your first name",
+  "ownerEmail": "you@example.edu",
+  "managementEmails": ["manager@example.edu"],
+  "calendarId": "staff-calendar-id@group.calendar.google.com",
+  "delivery": "disabled",
+  "reminderHour": 9,
+  "policy": {
+    "fullDay": 725,
+    "halfDay": 363,
+    "lunchMinutes": 45,
+    "openingVacation": 0,
+    "vacationMonthly": 1450,
+    "vacationCap": 34800,
+    "openingSick": 0,
+    "sickGrant": 5800,
+    "personalGrant": 1450
+  },
+  "schedules": [
+    {
+      "effective": "2026-07-01",
+      "start": "08:30",
+      "end": "16:30",
+      "lunchStart": "12:00"
+    },
+    {
+      "effective": "2026-09-01",
+      "start": "08:45",
+      "end": "17:00",
+      "lunchStart": "12:00"
+    }
+  ],
+  "holidays": []
+}

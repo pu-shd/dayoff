@@ -1,0 +1,15 @@
+[project]
+name = "dayoff-importer"
+version = "0.1.0"
+requires-python = ">=3.13"
+dependencies = []
+
+[dependency-groups]
+dev = ["ruff==0.14.4", "mypy==1.18.2"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.mypy]
+python_version = "3.13"
+check_untyped_defs = true

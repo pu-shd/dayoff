@@ -1,0 +1,22 @@
+name: CI
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install docker-compose CLI
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.local/bin"
+          printf '#!/bin/sh\nexec docker compose "$@"\n' > "$HOME/.local/bin/docker-compose"
+          chmod +x "$HOME/.local/bin/docker-compose"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Lint, format, types, tests and production bundle
+        run: |
+          docker-compose run --build --rm tests
+          docker-compose run --build --rm importer-tests

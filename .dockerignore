@@ -1,0 +1,11 @@
+.git
+node_modules
+build
+local
+.env*
+*.xlsx
+.clasp.json
+.clasprc.json
+.venv
+.mypy_cache
+.ruff_cache

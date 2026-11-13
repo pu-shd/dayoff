@@ -1,0 +1,13 @@
+services:
+  tests:
+    network_mode: none
+    build:
+      context: .
+      target: tests
+    init: true
+  importer-tests:
+    network_mode: none
+    build:
+      context: .
+      dockerfile: Dockerfile.importer
+    init: true

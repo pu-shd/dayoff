@@ -1,0 +1,10 @@
+node_modules/
+build/
+local/
+package-lock.json
+*.xlsx
+.venv/
+.mypy_cache/
+.ruff_cache/
+.clasp.json
+.env
