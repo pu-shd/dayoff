@@ -26,6 +26,7 @@ After CLI bootstrap, create a GitHub environment named dayoff. Add these encrypt
 | DAYOFF_DEPLOYMENT_ID | deploymentId from local/deployment.json                                  |
 | DAYOFF_CONFIG_JSON   | Your local/config.json                                                   |
 | DAYOFF_SEED_JSON     | Your local/legacy.json, if a workbook was imported                       |
+| DAYOFF_HISTORY_JSON  | Optional local/attendance-history.json, for a multi-year archive         |
 
 Keep the imported policy snapshot in subsequent deployments so opening amounts do not change. Empty seed is appropriate only for an installation that never imported a workbook.
 
@@ -49,6 +50,24 @@ Apply calendar and recipient changes locally using `node scripts/configure.ts --
 ```sh
 gh secret set DAYOFF_CONFIG_JSON --repo OWNER/REPO --env dayoff < local/config.json
 ```
+
+If you use the optional archive, set `DAYOFF_HISTORY_JSON` from its private JSON file with `gh secret set DAYOFF_HISTORY_JSON --repo OWNER/REPO --env dayoff < local/attendance-history.json`. GitHub limits individual secrets to 48 KB. For a larger archive, the same secret accepts a `gzip:` prefix followed by base64-encoded gzip JSON. Prepare a private compressed file and upload it through stdin:
+
+```sh
+.venv/bin/python - <<'PYTHON'
+import base64, gzip
+from pathlib import Path
+source = Path('local/attendance-history.json').read_bytes()
+target = Path('local/attendance-history.secret')
+target.write_text('gzip:' + base64.b64encode(gzip.compress(source, mtime=0)).decode())
+target.chmod(0o600)
+assert target.stat().st_size < 48 * 1024, 'Archive needs a private secret store with a larger size limit.'
+print('Private archive secret prepared; contents omitted.')
+PYTHON
+gh secret set DAYOFF_HISTORY_JSON --repo OWNER/REPO --env dayoff < local/attendance-history.secret
+```
+
+No archive data belongs in the public repository or workflow output. After deployment, the owner imports pending revisions in the app; redeployment does not mutate the ledger. Existing archived years remain readable if this optional secret is absent.
 
 Keep `DAYOFF_SEED_JSON` synchronized if an explicitly reviewed import migration changes it. Updating a GitHub secret does not itself deploy; dispatch the deployment workflow or let an enabled main-branch deployment apply it. A local CLI deployment alone does not update the GitHub secret, so an old secret would restore old settings on the next GitOps deployment.
 

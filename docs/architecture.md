@@ -20,6 +20,14 @@ Earlier versions sent every request to management and did not store recipient sn
 
 Migration 003 records the fiscal-year start in Script Properties and advances the schema version to 3. Existing ledgers default to July 1. Fiscal dates are configurable at setup and protected thereafter, alongside the year label. Date validation, date-picker limits, and reports derive from the same fiscal-boundary helper. Non-month-start boundaries clip the first/last reporting months, while monthly vacation accrual remains on calendar month ends.
 
+## Migration 004: private attendance archive
+
+Migration 004 creates a separate `History` tab with `fiscal_year`, `revision`, and JSON `payload` columns and advances the schema to 4. It runs under the existing authenticated write lock; GET stays read-only. The active Journal, request IDs, imported policies, and totals remain unchanged. A partially completed migration can safely resume.
+
+The optional `DAYOFF_HISTORY` bundle contains source-year snapshots. An explicit `importHistory` action validates them and appends only changed revisions. Reads fold by fiscal year, while older revisions remain in the sheet. Authentication applies to history reads and imports; imports also consume a single-use nonce. History data never enters Calendar, MailApp, the CALM queue, or current-year balance calculations. The dashboard returns an index; year details load separately.
+
+The importer compares cached monthly and annual totals, preserves raw daily codes without allocating hours, records source hashes, and flags incomplete or repeated data. It works backwards from the latest supplied FY and checks adjacent carryover using the following year's cap. An opening equal to the cap establishes only a lower bound on the preceding closing balance. Source balances are retained, including negative balances; mismatches remain reviewable. Hashes and source revisions support repeatable imports, not independent verification of spreadsheet contents.
+
 ## External effects and recovery
 
 Calendar event IDs derive deterministically from request ID and date. Each working day gets one event. Full days use exclusive next-day end dates; timed events include the configured timezone. Retried duplicate inserts update the existing event. Categories remain private to the ledger and management email; Calendar notes contain hours, CALM status, and a reference. Extended properties are correlation metadata, not a confidentiality boundary.
@@ -42,9 +50,9 @@ The browser uses text nodes for record content. CSV exports escape formulas. Ser
 
 - Google email sender; Outlook requires another adapter.
 - No CALM automation or official-balance verification.
-- Monthly history cannot reconstruct exact daily allocations or CALM state.
+- Historical daily markings cannot establish exact daily hours or CALM state.
 - No inbound sync for manual Calendar edits or approval replies.
-- One fiscal year per populated ledger; annual rollover uses a new instance.
+- One active fiscal year per populated ledger; a separate archive can hold many source years. Annual rollover uses a new instance.
 - Apps Script scheduling is approximate and quota-limited.
 - Mocked tests cannot establish actual account OAuth or Google service behavior.
 

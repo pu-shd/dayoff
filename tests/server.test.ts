@@ -4,12 +4,19 @@ import { readFileSync } from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
 import { runInNewContext } from "node:vm";
 import { buildSync } from "esbuild";
+import { historyFixture } from "./history-fixture.js";
+import type { HistoryArchive } from "../src/history.js";
 import type { Config, RecordEntry } from "../src/domain.js";
 type Handlers = typeof import("../src/server.js").handlers;
 const cfg = JSON.parse(readFileSync("config/example.json", "utf8")) as Config;
 function harness(
   delivery: Config["delivery"] = "google",
   seed: RecordEntry[] = [],
+  history: HistoryArchive = {
+    schemaVersion: 1,
+    anchorFiscalYear: 2027,
+    years: [],
+  },
 ) {
   const rows: unknown[][] = [],
     properties = new Map<string, string>(),
@@ -26,19 +33,27 @@ function harness(
     failMail = false;
   let identity = cfg.ownerEmail,
     created = 0;
-  const sheet = {
+  const makeSheet = (data: unknown[][]) => ({
     setName: () => {},
-    appendRow: (row: unknown[]) => rows.push(row),
+    appendRow: (row: unknown[]) => data.push(row),
     setFrozenRows: () => {},
-    getLastRow: () => rows.length,
+    getLastRow: () => data.length,
     getRange: (first: number, _column: number, count: number) => ({
-      getValues: () => rows.slice(first - 1, first - 1 + count),
+      getValues: () => data.slice(first - 1, first - 1 + count),
     }),
-  };
+  });
+  const sheet = makeSheet(rows),
+    historyRows: unknown[][] = [];
+  const sheets = new Map([["Journal", sheet]]);
   const book = {
     getId: () => "private-ledger",
     getSheets: () => [sheet],
-    getSheetByName: () => sheet,
+    getSheetByName: (name: string) => sheets.get(name) ?? null,
+    insertSheet: (name: string) => {
+      const s = makeSheet(historyRows);
+      sheets.set(name, s);
+      return s;
+    },
   };
   const props = {
     getProperty: (k: string) => properties.get(k) || null,
@@ -55,6 +70,7 @@ function harness(
     define: {
       DAYOFF_CONFIG: JSON.stringify({ ...cfg, delivery }),
       DAYOFF_SEED: JSON.stringify({ records: seed }),
+      DAYOFF_HISTORY: JSON.stringify(history),
     },
   }).outputFiles[0].text;
   const context: Record<string, unknown> = {
@@ -158,6 +174,8 @@ function harness(
     api,
     init,
     rows,
+    historyRows,
+    sheets,
     properties,
     events,
     mails,
@@ -378,7 +396,7 @@ test("migration 002 appends routing without changing balances and never runs on 
   assert.equal(h.rows.length, rows);
   assert.equal(h.properties.get("SCHEMA_VERSION"), "1");
   const after = h.api.initialize(before.nonce);
-  assert.equal(h.properties.get("SCHEMA_VERSION"), "3");
+  assert.equal(h.properties.get("SCHEMA_VERSION"), "4");
   assert.equal(after.records[0].input.emailTo, "management");
   assert.equal(
     after.records[0].emailRecipients?.join(","),
@@ -420,4 +438,80 @@ test("ledger fiscal boundaries are stored and protected independently of its yea
   assert.equal(h.properties.get("FISCAL_YEAR_START"), "07-01");
   h.properties.set("FISCAL_YEAR_START", "10-01");
   assert.throws(() => h.api.getDashboard(), /fiscal-year start/);
+});
+
+test("history import is private, idempotent, and does not change active records, totals, mail or Calendar", () => {
+  const h = harness("google", [], historyFixture());
+  let s = h.init();
+  s = h.api.createRequest(s.nonce, {
+    id: "request-history",
+    category: "vacation",
+    mode: "full",
+    first: "2026-11-16",
+    last: "2026-11-16",
+    emailTo: "none",
+  });
+  const original = JSON.stringify({
+    records: s.records,
+    totals: s.totals,
+    rows: h.rows,
+    events: [...h.events],
+    mails: h.mails,
+  });
+  assert.equal(s.history.pendingImportCount, 1);
+  s = h.api.importHistory(s.nonce);
+  assert.equal(s.history.years.length, 1);
+  assert.equal(s.history.pendingImportCount, 0);
+  assert.equal(h.properties.get("HISTORY_ANCHOR_FY"), "2027");
+  assert.equal(h.historyRows.length, 2);
+  s = h.api.importHistory(s.nonce);
+  assert.equal(h.historyRows.length, 2);
+  assert.equal(
+    JSON.stringify({
+      records: s.records,
+      totals: s.totals,
+      rows: h.rows,
+      events: [...h.events],
+      mails: h.mails,
+    }),
+    original,
+  );
+  assert.equal(h.api.getHistoryYear(2027).source.headerYear, "2026");
+  assert.throws(() => h.api.getHistoryYear(2028), /No attendance/);
+  h.setIdentity("outsider@example.edu");
+  assert.throws(() => h.api.getHistoryYear(2027), /different account/);
+});
+test("migration 004 adds only the archive sheet and never writes during a read", () => {
+  const h = harness("google", [], historyFixture());
+  h.init();
+  h.sheets.delete("History");
+  h.historyRows.length = 0;
+  h.properties.set("SCHEMA_VERSION", "3");
+  const before = h.rows.length;
+  let s = h.api.getDashboard();
+  assert.equal(h.properties.get("SCHEMA_VERSION"), "3");
+  assert.equal(h.sheets.has("History"), false);
+  assert.throws(() => h.api.importHistory("invalid"), /Invalid confirmation/);
+  s = h.api.importHistory(s.nonce);
+  assert.equal(h.properties.get("SCHEMA_VERSION"), "4");
+  assert.equal(h.rows.length, before);
+  assert.equal(s.history.years.length, 1);
+});
+
+test("a changed source appends a history revision without replacing prior rows", () => {
+  const archive = historyFixture(),
+    h = harness("google", [], archive);
+  let s = h.init();
+  h.api.importHistory(s.nonce);
+  const old = structuredClone(archive.years[0]);
+  old.revision = "c".repeat(64);
+  old.daily[0].mark = "Older source";
+  h.historyRows.push([2027, old.revision, JSON.stringify(old)]);
+  assert.equal(h.api.getHistoryYear(2027).daily[0].mark, "Older source");
+  s = h.api.getDashboard();
+  assert.equal(s.history.pendingImportCount, 1);
+  s = h.api.importHistory(s.nonce);
+  assert.equal(h.historyRows.length, 4);
+  assert.equal(h.api.getHistoryYear(2027).revision, archive.years[0].revision);
+  assert.equal(s.records.length, 0);
 });

@@ -40,6 +40,22 @@ const { validateConfig } = await import(
     Buffer.from(domain.outputFiles[0].text).toString("base64")
 );
 validateConfig({ ...config, policy: { ...config.policy, ...seed.policy } });
+const historyPath = process.env.DAYOFF_HISTORY || vars.DAYOFF_HISTORY;
+const history = historyPath
+  ? JSON.parse(await readFile(historyPath, "utf8"))
+  : { schemaVersion: 1, anchorFiscalYear: config.fiscalYear, years: [] };
+const historyModule = await build({
+  entryPoints: ["src/history.ts"],
+  bundle: true,
+  format: "esm",
+  platform: "node",
+  write: false,
+});
+const { validateHistory } = await import(
+  "data:text/javascript;base64," +
+    Buffer.from(historyModule.outputFiles[0].text).toString("base64")
+);
+validateHistory(history);
 await mkdir("build", { recursive: true });
 await build({
   entryPoints: ["src/server.ts"],
@@ -51,12 +67,15 @@ await build({
   define: {
     DAYOFF_CONFIG: JSON.stringify(config),
     DAYOFF_SEED: JSON.stringify(seed),
+    DAYOFF_HISTORY: JSON.stringify(history),
   },
 });
 const handlers = [
   "doGet",
   "getDashboard",
   "initialize",
+  "importHistory",
+  "getHistoryYear",
   "preview",
   "createRequest",
   "cancelRequest",

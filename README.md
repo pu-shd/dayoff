@@ -15,6 +15,7 @@ This is a small Google Apps Script web app. Each employee deploys an **owner-onl
 - Weekday reminder digests with authenticated confirmation links.
 - Cancellation and CALM correction tracking.
 - Private workbook import and details/balance CSV exports.
+- Private multi-year attendance archive with raw daily markings and carryover checks.
 - Preview mode that creates no records, calendar events, or emails.
 - CLI deployment, containerized tests, lint, formatting, types, and CI.
 
@@ -104,6 +105,20 @@ Current vacation includes accrual through completed months. FY-end projection in
 Imports preserve **monthly totals**, not guessed daily hours. Charges are assigned to month-end; balances within an imported month are approximate. Imported CALM state is unverified, and historical summaries create no reminders or calendar/email activity. Avoid re-entering requests already included in those totals, especially future bookings.
 
 Initialize the starting snapshot once. Redeploying the same import is idempotent. Changing an imported month's contents does not overwrite its existing record; corrections require a reviewed migration. Do not manually edit the Journal.
+
+For a folder of past workbooks named `fyYYYY...xlsx`, collate a separate private archive:
+
+```sh
+.venv/bin/python scripts/import_workbook.py \
+  --source-directory '/path/to/attendance workbooks' \
+  --anchor-fy 2027 --output local/attendance-history.json
+```
+
+Add `DAYOFF_HISTORY=local/attendance-history.json` to your private `.env`, then run `./scripts/update.sh`. Refresh the app and select **Import attendance history**. This authenticated action imports the configured years without sending mail, creating Calendar events, or changing current-year charges or balances. Importing the same archive again is safe. Deployment alone does not import it.
+
+**Attendance history** shows each year's monthly usage, cached closing balances, raw dated markings, source legend, and CSV totals. It starts with the latest workbook as the balance anchor and checks earlier closing balances against the following year's opening and carry cap. Caps can prevent a unique reverse balance; discrepancies remain visible rather than rewriting sources. No daily hours or CALM status are inferred from letter codes. Incomplete filenames, repeated daily/monthly data, stale internal year labels, and invalid-date markings are flagged. The archive is a source transcription, not proof that each year's contents were independently verified. No combined lifetime tally is shown when repeated source data could inflate it.
+
+The anchor is the most recent source FY, independent of the active ledger's FY. A snapshot for the active FY remains the original workbook view; current balances above it continue to reflect live requests. Changed archive sources append a new revision in the private Sheet's `History` tab, retaining prior revisions. Removing a source file does not delete saved history. Archive imports use the legacy template's July–June dates; the active ledger can use another configured fiscal boundary. See [operations](docs/operations.md) for recovery and [GitOps](docs/gitops.md) for optional private archive secrets.
 
 Cancel and recreate a request to change dates, hours, or category. Manual Calendar edits are not imported. Full-day policy is independent of elapsed office hours: 8:45–5 minus 45 minutes is 7.5 hours, but the configured full day is 7.25. Two half days can total 7.26; choose Full day for a whole-day absence and confirm rounding rules with your organization.
 

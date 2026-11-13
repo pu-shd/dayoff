@@ -658,6 +658,69 @@
             >
           </div>
         </section>
+        <section class="panel hide" id="history-section">
+          <div class="heading">
+            <div>
+              <p class="eyebrow">Your workbook archive</p>
+              <h2>Attendance history</h2>
+            </div>
+            <span class="badge" id="history-count"></span>
+          </div>
+          <p class="section-note muted" id="history-note"></p>
+          <button id="import-history" class="secondary hide">
+            Import attendance history
+          </button>
+          <div id="history-browser" class="hide">
+            <label for="history-year"
+              >Fiscal year<select id="history-year"></select
+            ></label>
+            <p id="history-source" class="muted"></p>
+            <div id="history-warnings" class="status"></div>
+            <div id="history-summary" class="cards"></div>
+            <h3 style="margin-top: 24px">Monthly source figures</h3>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Month</th>
+                    <th>Vacation used</th>
+                    <th>Sick used</th>
+                    <th>Personal used</th>
+                    <th>Vacation closing</th>
+                    <th>Sick closing</th>
+                    <th>Personal closing</th>
+                  </tr>
+                </thead>
+                <tbody id="history-months"></tbody>
+              </table>
+            </div>
+            <p id="history-reconciliation" class="muted"></p>
+            <button id="history-export" class="secondary">
+              Export year totals CSV
+            </button>
+            <details class="quiet-details">
+              <summary id="history-daily-count">Daily source markings</summary>
+              <p class="muted">
+                Markings are transcribed as written. Daily hours and CALM entry
+                are not inferred.
+              </p>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Source cell</th>
+                      <th>Marking</th>
+                    </tr>
+                  </thead>
+                  <tbody id="history-daily"></tbody>
+                </table>
+              </div>
+              <p id="history-legend" class="muted"></p>
+              <p id="history-unmapped" class="muted"></p>
+            </details>
+          </div>
+        </section>
       </div>
       <footer>
         CALM remains the official record. These are your personal calculations.
@@ -667,7 +730,7 @@
     <script>
       'use strict';
       const focus = <?!= focus ?>;
-      let state, pendingInput, working = false;
+      let state, pendingInput, historyYear, historyKey, historyLoad = 0, working = false;
       const $ = id => document.getElementById(id);
       const money = n => (n / 100).toFixed(2);
       const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
@@ -719,6 +782,38 @@
        $('preview-save-note').textContent=state.config.delivery==='disabled'?'Preview mode is enabled. This request cannot be saved or sent yet.':'Saving records these hours and creates the real Staff Calendar entry.';
        $('preview').classList.remove('hide'); enabled();
       }
+      function historyTableRow(values) {const row=document.createElement('tr');for(const value of values)row.append(text('td',value));return row;}
+      async function loadHistory(year) {
+       const request=++historyLoad; historyKey=null; historyYear=null; $('history-year').disabled=true;
+       try {
+        const y=await rpc('getHistoryYear',year); if(request!==historyLoad)return;
+        historyYear=y;historyKey=y.fiscalYear+':'+y.revision;
+        $('history-source').textContent=y.source.name+' · internal label '+(y.source.headerYear||'absent')+(y.fiscalYear===state.history.anchorFiscalYear?' · workbook balance anchor':'');
+        $('history-warnings').replaceChildren(...y.warnings.map(w=>text('p',w)));
+        $('history-summary').replaceChildren();
+        for(const c of ['vacation','sick','personal']){const card=text('div','','card');card.append(text('span',cap(c)+' used in source'),text('strong',money(y.totals[c])+' h'),text('small','Workbook closing: '+(y.balances[c]===null?'unavailable':money(y.balances[c])+' h')));$('history-summary').append(card);}
+        $('history-months').replaceChildren(...y.months.map(m=>historyTableRow([m.month,...['vacation','sick','personal'].map(c=>money(m[c])),...['vacation','sick','personal'].map(c=>m.balances[c]===null?'Unavailable':money(m.balances[c]))])));
+        $('history-daily').replaceChildren(...y.daily.map(d=>historyTableRow([d.date,d.cell,d.mark])));
+        $('history-daily-count').textContent=y.daily.length+' daily source markings';
+        $('history-legend').textContent='Source legend: '+y.legend.map(e=>e.mark).join(' · ');
+        $('history-unmapped').textContent=y.unmapped.length?'Unmapped cells (invalid calendar dates): '+y.unmapped.map(e=>e.cell+' = '+e.mark).join(' · '):'';
+        const r=y.reconciliation;
+        $('history-reconciliation').textContent=r.followingYear?'Carryover to FY'+r.followingYear+': '+['vacation','sick'].map(c=>cap(c)+' '+r[c].status+(r[c].backwardConstraint==='at-least'?' (carry cap prevents a unique reverse balance)':'')).join(' · ')+'. Source balances are retained.':y.fiscalYear===state.history.anchorFiscalYear?'This workbook anchors the collation. Its source figures remain separate from your live balances.':'No adjacent following-year source is available for carryover reconciliation.';
+       } catch(e){if(request===historyLoad)message(e.message,true);}
+       finally{if(request===historyLoad)$('history-year').disabled=false;}
+      }
+      function renderHistory(h) {
+       const years=h?.years || []; const visible=years.length || h?.configuredCount;
+       $('history-section').classList.toggle('hide',!visible);if(!visible)return;
+       $('history-count').textContent=years.length+' fiscal years';
+       $('history-note').textContent='Working backwards from FY'+h.anchorFiscalYear+'. Historical figures preserve the workbooks as supplied; flags identify incomplete, repeated, or unreconciled data. Your active-year balances above use the current ledger.';
+       $('import-history').classList.toggle('hide',!h.pendingImportCount);
+       $('history-browser').classList.toggle('hide',!years.length);
+       const selected=Number($('history-year').value), year=years.some(y=>y.fiscalYear===selected)?selected:years.some(y=>y.fiscalYear===h.anchorFiscalYear)?h.anchorFiscalYear:years[0]?.fiscalYear;
+       $('history-year').replaceChildren(...years.map(y=>{const o=text('option','FY'+y.fiscalYear+(y.incomplete?' · incomplete':'')+(y.duplicateYears.length?' · repeated source data':''));o.value=String(y.fiscalYear);o.selected=y.fiscalYear===year;return o;}));
+       const summary=years.find(y=>y.fiscalYear===year);
+       if(summary && historyKey!==year+':'+summary.revision)loadHistory(year);
+      }
       function render(s) {
        state=s;
        $('mode').textContent=s.config.delivery==='disabled'?'Preview mode':'Live';
@@ -765,6 +860,7 @@
        }
        const first=document.querySelector('[name=first]'),last=document.querySelector('[name=last]');
        first.min=last.min=s.fiscalPeriod.start;first.max=last.max=s.fiscalPeriod.end;
+       renderHistory(s.history);
        enabled();
       }
       function invalidate(){pendingInput=null;$('preview').classList.add('hide');}
@@ -786,6 +882,9 @@
        if(ok || state.records.some(r=>r.id===id)){invalidate();$('email-choice').value='self';}
        if(ok)message('Request saved and Calendar updated. '+(state.records.find(r=>r.id===id)?.email==='skipped'?'No request email was sent.':'Your chosen request email was sent.')+' CALM entry remains on your checklist.');
       });
+      $('import-history').addEventListener('click',()=>action('importHistory'));
+      $('history-year').addEventListener('change',()=>loadHistory(Number($('history-year').value)));
+      $('history-export').addEventListener('click',()=>{if(!historyYear)return;const y=historyYear,rows=['month,vacation_used_hours,sick_used_hours,personal_used_hours,vacation_closing_hours,sick_closing_hours,personal_closing_hours'];for(const m of y.months)rows.push([m.month,...['vacation','sick','personal'].map(c=>money(m[c])),...['vacation','sick','personal'].map(c=>m.balances[c]===null?'':money(m.balances[c]))].join(','));rows.push(['annual_used',...['vacation','sick','personal'].map(c=>money(y.totals[c])),'','',''].join(','));download('dayoff-history-FY'+y.fiscalYear+'.csv',rows.join('\r\n'));});
       $('initialize').addEventListener('click',()=>action('initialize'));
       $('install').addEventListener('click',()=>action('saveReminders',Number($('reminder-hour').value),true));
       $('stop').addEventListener('click',()=>action('stopReminders'));

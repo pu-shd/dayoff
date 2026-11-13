@@ -71,6 +71,85 @@ class ImportTests(unittest.TestCase):
                 )
             self.assertEqual(module.read_cells(path), {"A20": "July", "AH20": "10.88"})
 
+    def write_workbook(self, path, extra=None):
+        from xml.sax.saxutils import escape
+
+        cells = self.cells() | {
+            "AI31": "348",
+            "AK31": "116",
+            "AM31": "14.5",
+            "AI13": "58",
+            "B20": "V",
+            "L7": "V: Vacation",
+        }
+        cells.update(extra or {})
+        entries = "".join(
+            f'<c r="{ref}" t="inlineStr"><is><t>{escape(value)}</t></is></c>'
+            for ref, value in cells.items()
+        )
+        with zipfile.ZipFile(path, "w") as z:
+            z.writestr(
+                "xl/worksheets/sheet1.xml",
+                f'<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row>{entries}</row></sheetData></worksheet>',
+            )
+
+    def test_archive_preserves_raw_daily_marks_partial_flags_and_reverse_anchor(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            self.write_workbook(folder / "fy2026 attendance (incomplete).xlsx", {"B20": "3.63-V"})
+            self.write_workbook(folder / "fy2027 attendance.xlsx", {"B20": "V"})
+            result = module.collate_history(folder, 2027)
+            self.assertEqual([y["fiscalYear"] for y in result["years"]], [2027, 2026])
+            year = result["years"][1]
+            self.assertTrue(year["source"]["incomplete"])
+            self.assertEqual(
+                year["daily"][0], {"date": "2025-07-01", "cell": "B20", "mark": "3.63-V"}
+            )
+            self.assertEqual(year["reconciliation"]["followingYear"], 2027)
+            self.assertEqual(year["reconciliation"]["vacation"]["status"], "matches")
+            self.assertEqual(result["anchorFiscalYear"], 2027)
+
+    def test_archive_flags_identical_data_without_dropping_years_or_guessing_hours(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            self.write_workbook(folder / "fy2026.xlsx")
+            self.write_workbook(folder / "fy2027.xlsx")
+            result = module.collate_history(folder, 2027)
+            self.assertEqual(len(result["years"]), 2)
+            self.assertEqual(result["years"][0]["duplicateYears"], [2026])
+            self.assertNotIn("hours", result["years"][0]["daily"][0])
+            self.assertEqual(len(result["years"][0]["revision"]), 64)
+
+    def test_archive_rejects_duplicate_years_and_retains_marks_in_invalid_day_cells(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            self.write_workbook(folder / "fy2027.xlsx", {"AE27": "V"})
+            result = module.collate_history(folder, 2027)
+            self.assertTrue(any(d["cell"] == "AE27" for d in result["years"][0]["unmapped"]))
+            self.write_workbook(folder / "fy2027 copy.xlsx")
+            with self.assertRaisesRegex(ValueError, "Multiple"):
+                module.collate_history(folder, 2027)
+
+    def test_reverse_checks_respect_caps_and_flag_mismatch_without_rewriting_anchor(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            self.write_workbook(folder / "fy2026.xlsx", {"AI31": "400", "AM31": "-1"})
+            self.write_workbook(folder / "fy2027.xlsx")
+            first = module.collate_history(folder, 2027)
+            self.assertEqual(first, module.collate_history(folder, 2027))
+            prior = first["years"][1]
+            self.assertEqual(prior["reconciliation"]["vacation"]["status"], "matches")
+            self.assertEqual(prior["reconciliation"]["vacation"]["backwardConstraint"], "at-least")
+            self.assertEqual(prior["balances"]["vacation"], 40000)
+            self.assertEqual(prior["balances"]["personal"], -100)
+            self.write_workbook(folder / "fy2026.xlsx", {"AI31": "100"})
+            changed = module.collate_history(folder, 2027)
+            self.assertEqual(
+                changed["years"][1]["reconciliation"]["vacation"]["status"], "mismatch"
+            )
+            self.assertEqual(changed["years"][0]["totals"], first["years"][0]["totals"])
+            self.assertNotEqual(changed["years"][1]["revision"], prior["revision"])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

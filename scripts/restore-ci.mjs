@@ -1,5 +1,6 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { gunzipSync } from "node:zlib";
 const required = [
   "DAYOFF_CONFIG_JSON",
   "CLASP_AUTH_JSON",
@@ -22,13 +23,28 @@ write(
     : { records: [] },
 );
 write(".clasp.json", JSON.parse(process.env.CLASP_PROJECT_JSON));
+if (process.env.DAYOFF_HISTORY_JSON)
+  write(
+    "local/attendance-history.json",
+    JSON.parse(
+      process.env.DAYOFF_HISTORY_JSON.startsWith("gzip:")
+        ? gunzipSync(
+            Buffer.from(process.env.DAYOFF_HISTORY_JSON.slice(5), "base64"),
+            { maxOutputLength: 2_000_000 },
+          ).toString("utf8")
+        : process.env.DAYOFF_HISTORY_JSON,
+    ),
+  );
 write(
   join(process.env.RUNNER_TEMP, "dayoff-clasp.json"),
   JSON.parse(process.env.CLASP_AUTH_JSON),
 );
 writeFileSync(
   ".env",
-  "DAYOFF_CONFIG=local/config.json\nDAYOFF_IMPORT=local/legacy.json\n",
+  "DAYOFF_CONFIG=local/config.json\nDAYOFF_IMPORT=local/legacy.json\n" +
+    (process.env.DAYOFF_HISTORY_JSON
+      ? "DAYOFF_HISTORY=local/attendance-history.json\n"
+      : ""),
   { mode: 0o600 },
 );
 console.log(

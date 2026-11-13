@@ -15,13 +15,21 @@ import {
 } from "./domain.js";
 import { submit, sync, cancel, markCalm, type Ports } from "./workflow.js";
 import { migration002 } from "./migrations.js";
+import {
+  validateHistory,
+  validateHistoryYear,
+  historyIndex,
+  type HistoryArchive,
+  type HistoryYear,
+} from "./history.js";
+declare const DAYOFF_HISTORY: HistoryArchive;
 declare const DAYOFF_CONFIG: Config;
 declare const DAYOFF_SEED: {
   policy?: Partial<Config["policy"]>;
   records: RecordEntry[];
   warnings?: string[];
 };
-const SCHEMA = 3;
+const SCHEMA = 4;
 function config(): Config {
   return validateConfig({
     ...DAYOFF_CONFIG,
@@ -56,7 +64,7 @@ function store() {
   invariant(id, "Initialize your private ledger first.");
   const book = SpreadsheetApp.openById(id);
   invariant(
-    ["1", "2", "3"].includes(props().getProperty("SCHEMA_VERSION") || ""),
+    ["1", "2", "3", "4"].includes(props().getProperty("SCHEMA_VERSION") || ""),
     "Unsupported ledger schema. Apply a versioned migration.",
   );
   const sheet = book.getSheetByName("Journal");
@@ -77,6 +85,81 @@ function list(): RecordEntry[] {
 function save(r: RecordEntry) {
   store().appendRow([new Date().toISOString(), "request", JSON.stringify(r)]);
 }
+// Migration 004 adds an append-only archive, separate from the active-year journal.
+function historySheet(create = false) {
+  const id = props().getProperty("LEDGER_ID");
+  if (!id) return null;
+  const book = SpreadsheetApp.openById(id);
+  let sheet = book.getSheetByName("History");
+  if (!sheet && create) sheet = book.insertSheet("History");
+  if (sheet && create && sheet.getLastRow() === 0) {
+    sheet.appendRow(["fiscal_year", "revision", "payload"]);
+    sheet.setFrozenRows(1);
+  }
+  if (sheet)
+    invariant(
+      sheet.getLastRow() > 0 &&
+        sheet.getRange(1, 1, 1, 3).getValues()[0].join(",") ===
+          "fiscal_year,revision,payload",
+      "Invalid attendance history sheet headers.",
+    );
+  return sheet;
+}
+function historyYears(): HistoryYear[] {
+  const sheet = historySheet(),
+    latest = new Map<number, HistoryYear>();
+  if (!sheet || sheet.getLastRow() < 2) return [];
+  for (const row of sheet
+    .getRange(2, 1, sheet.getLastRow() - 1, 3)
+    .getValues()) {
+    const y = validateHistoryYear(JSON.parse(String(row[2])));
+    invariant(
+      String(row[0]) === String(y.fiscalYear) && row[1] === y.revision,
+      "Invalid attendance history index.",
+    );
+    latest.set(y.fiscalYear, y);
+  }
+  return [...latest.values()];
+}
+function getHistoryYear(year: number) {
+  return safe(() => {
+    actor();
+    invariant(
+      Number.isInteger(year) && year >= 2000 && year <= 2200,
+      "Invalid fiscal year.",
+    );
+    const found = historyYears().find((y) => y.fiscalYear === year);
+    invariant(found, "No attendance history for this fiscal year.");
+    return found;
+  });
+}
+function importHistory(token: string) {
+  return safe(() =>
+    guard(token, (c) => {
+      const archive = validateHistory(DAYOFF_HISTORY);
+      const latest = new Map(
+        historyYears().map((y) => [y.fiscalYear, y.revision]),
+      );
+      const sheet = historySheet(true);
+      invariant(sheet, "Initialize your private ledger first.");
+      let imported = 0;
+      for (const y of archive.years)
+        if (latest.get(y.fiscalYear) !== y.revision) {
+          sheet.appendRow([y.fiscalYear, y.revision, JSON.stringify(y)]);
+          imported++;
+        }
+      if (archive.years.length)
+        props().setProperty(
+          "HISTORY_ANCHOR_FY",
+          String(archive.anchorFiscalYear),
+        );
+      return {
+        ...dashboard(c),
+        notice: `Attendance history saved: ${imported} fiscal years imported; current-year balances preserved.`,
+      };
+    }),
+  );
+}
 function migrate(c: Config) {
   if (
     !props().getProperty("LEDGER_ID") ||
@@ -84,7 +167,7 @@ function migrate(c: Config) {
   )
     return;
   invariant(
-    ["1", "2"].includes(props().getProperty("SCHEMA_VERSION") || ""),
+    ["1", "2", "3"].includes(props().getProperty("SCHEMA_VERSION") || ""),
     "Unsupported ledger schema.",
   );
   if (props().getProperty("SCHEMA_VERSION") === "1")
@@ -94,6 +177,7 @@ function migrate(c: Config) {
     }
   // Migration 003 fixes the ledger's annual boundary without changing journal rows.
   props().setProperty("FISCAL_YEAR_START", c.fiscalYearStart ?? "07-01");
+  historySheet(true);
   props().setProperty("SCHEMA_VERSION", String(SCHEMA));
 }
 function locked<T>(fn: () => T): T {
@@ -211,12 +295,25 @@ function dashboard(c: Config) {
   const initialized = !!props().getProperty("LEDGER_ID"),
     records = initialized ? list() : [];
   const today = Utilities.formatDate(new Date(), c.timeZone, "yyyy-MM-dd");
+  const archive = validateHistory(DAYOFF_HISTORY),
+    years = historyYears();
+  const revisions = new Map(years.map((y) => [y.fiscalYear, y.revision]));
   return {
     initialized,
     nonce: nonce(),
     config: { ...c },
     fiscalPeriod: fiscalBounds(c),
     records,
+    history: {
+      anchorFiscalYear: Number(
+        props().getProperty("HISTORY_ANCHOR_FY") || archive.anchorFiscalYear,
+      ),
+      configuredCount: archive.years.length,
+      pendingImportCount: archive.years.filter(
+        (y) => revisions.get(y.fiscalYear) !== y.revision,
+      ).length,
+      years: historyIndex(years),
+    },
     totals: report(c, records, today),
     today,
     ledgerUrl: initialized
@@ -261,10 +358,12 @@ function initialize(token: string) {
         sheet.setFrozenRows(1);
         props().setProperties({
           LEDGER_ID: book.getId(),
-          SCHEMA_VERSION: String(SCHEMA),
+          SCHEMA_VERSION: "3",
           FISCAL_YEAR: String(c.fiscalYear),
           FISCAL_YEAR_START: c.fiscalYearStart ?? "07-01",
         });
+        historySheet(true);
+        props().setProperty("SCHEMA_VERSION", String(SCHEMA));
       }
       const ids = new Set(list().map((r) => r.id));
       for (const r of DAYOFF_SEED.records)
@@ -568,6 +667,8 @@ export const handlers = {
   doGet,
   getDashboard,
   initialize,
+  importHistory,
+  getHistoryYear,
   preview,
   createRequest,
   cancelRequest,

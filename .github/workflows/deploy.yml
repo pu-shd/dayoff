@@ -56,6 +56,7 @@ jobs:
         env:
           DAYOFF_CONFIG_JSON: ${{ secrets.DAYOFF_CONFIG_JSON }}
           DAYOFF_SEED_JSON: ${{ secrets.DAYOFF_SEED_JSON }}
+          DAYOFF_HISTORY_JSON: ${{ secrets.DAYOFF_HISTORY_JSON }}
           CLASP_AUTH_JSON: ${{ secrets.CLASP_AUTH_JSON }}
           CLASP_PROJECT_JSON: ${{ secrets.CLASP_PROJECT_JSON }}
           DAYOFF_DEPLOYMENT_ID: ${{ secrets.DAYOFF_DEPLOYMENT_ID }}

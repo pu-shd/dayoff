@@ -3,6 +3,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { runInNewContext } from "node:vm";
+import { historyFixture } from "./history-fixture.js";
+import { historyIndex } from "../src/history.js";
+import type { HistoryArchive } from "../src/history.js";
 import { parseHTML } from "linkedom";
 import {
   createDays,
@@ -33,7 +36,11 @@ function record(input: Input): RecordEntry {
     updated: "now",
   };
 }
-function harness(records: RecordEntry[] = [], focus = { id: "", version: "" }) {
+function harness(
+  records: RecordEntry[] = [],
+  focus = { id: "", version: "" },
+  archive?: HistoryArchive,
+) {
   const { document, window } = parseHTML(html);
   // linkedom omits native select.value setter/default selection; emulate browser behavior.
   Object.defineProperty(window.HTMLSelectElement.prototype, "value", {
@@ -59,6 +66,12 @@ function harness(records: RecordEntry[] = [], focus = { id: "", version: "" }) {
   const state = {
     fiscalPeriod: { start: "2026-07-01", end: "2027-06-30" },
     initialized: true,
+    history: {
+      anchorFiscalYear: 2027,
+      configuredCount: archive?.years.length ?? 0,
+      pendingImportCount: archive?.years.length ?? 0,
+      years: [] as ReturnType<typeof historyIndex>,
+    },
     nonce: "test-nonce",
     config: cfg,
     records,
@@ -84,6 +97,15 @@ function harness(records: RecordEntry[] = [], focus = { id: "", version: "" }) {
   }
   function response(name: string, args: unknown[]) {
     calls.push({ name, args });
+    if (name === "importHistory") {
+      state.history.years = historyIndex(archive!.years);
+      state.history.pendingImportCount = 0;
+      return refresh();
+    }
+    if (name === "getHistoryYear")
+      return structuredClone(
+        archive!.years.find((y) => y.fiscalYear === args[0]),
+      );
     if (name === "preview") {
       const r = record(args[0] as Input);
       return {
@@ -252,4 +274,26 @@ test("opening an older reminder highlights review without confirming anything", 
   await h.tick();
   assert.match(h.get("focus-notice").textContent!, /earlier revision/);
   assert.equal(h.calls.filter((c) => c.name === "confirmCalm").length, 0);
+});
+
+test("private history imports explicitly, displays source figures and treats raw marks as text", async () => {
+  const h = harness([], undefined, historyFixture());
+  await h.tick();
+  assert.equal(h.get("history-section").classList.contains("hide"), false);
+  assert.equal(h.get("history-browser").classList.contains("hide"), true);
+  assert.equal(h.calls.filter((c) => c.name === "importHistory").length, 0);
+  h.get("import-history").click();
+  await h.tick();
+  assert.equal(h.get("history-count").textContent, "1 fiscal years");
+  assert.equal(h.get("history-months").children.length, 12);
+  assert.match(h.get("history-daily").textContent!, /<b>V<\/b>/);
+  assert.equal(h.get("history-daily").querySelector("b"), null);
+  assert.match(h.get("history-summary").textContent!, /-1.00 h/);
+  assert.equal(h.get("import-history").classList.contains("hide"), true);
+  assert.equal(
+    h.calls.some((c) =>
+      ["createRequest", "confirmCalm", "testMail"].includes(c.name),
+    ),
+    false,
+  );
 });
