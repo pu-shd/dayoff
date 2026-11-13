@@ -331,3 +331,85 @@ test("history months link to the configured calendar, timezone and exact month i
   }
   assert.equal(h.calls.filter((c) => c.name === "createRequest").length, 0);
 });
+
+test("leave categories stay identifiable across balances, source columns, preview, records and CALM", async () => {
+  const categories = ["vacation", "sick", "personal"] as const;
+  const records = categories.map((category, index) =>
+    record({
+      id: "category-" + category,
+      category,
+      mode: "full",
+      first: "2026-11-" + (16 + index),
+      last: "2026-11-" + (16 + index),
+    }),
+  );
+  const h = harness(records, undefined, historyFixture());
+  await h.tick();
+  h.get("import-history").click();
+  await h.tick();
+  assert.deepEqual(
+    [...h.get("cards").children].map((n) => n.getAttribute("data-category")),
+    categories,
+  );
+  assert.deepEqual(
+    [...h.get("history-summary").children].map((n) =>
+      n.getAttribute("data-category"),
+    ),
+    categories,
+  );
+  const expected = [null, ...categories, ...categories];
+  assert.deepEqual(
+    [
+      ...h.get("history-months").parentElement!.querySelectorAll("thead th"),
+    ].map((n) => n.getAttribute("data-category")),
+    expected,
+  );
+  for (const row of h.get("history-months").children)
+    assert.deepEqual(
+      [...row.children].map((n) => n.getAttribute("data-category")),
+      expected,
+    );
+  for (const category of categories) {
+    assert.equal(
+      h.get("calm-category-" + category).getAttribute("data-category"),
+      category,
+    );
+    assert.equal(
+      h.get("records").querySelector(`[data-category="${category}"]`)?.tagName,
+      "TR",
+    );
+    (h.document.querySelector("[name=category]") as HTMLSelectElement).value =
+      category;
+    await h.preview();
+    assert.equal(h.get("preview").getAttribute("data-category"), category);
+  }
+});
+
+test("last date defaults to the first date and follows it until an explicit end date is entered", async () => {
+  const h = harness();
+  await h.tick();
+  const first = h.document.querySelector("[name=first]") as HTMLInputElement;
+  const last = h.document.querySelector("[name=last]") as HTMLInputElement;
+  first.value = "2026-11-16";
+  first.dispatchEvent(new h.window.Event("input", { bubbles: true }));
+  assert.equal(last.value, "2026-11-16");
+  first.value = "2026-11-17";
+  first.dispatchEvent(new h.window.Event("change", { bubbles: true }));
+  assert.equal(last.value, "2026-11-17");
+  last.value = "2026-11-20";
+  last.dispatchEvent(new h.window.Event("input", { bubbles: true }));
+  first.value = "2026-11-18";
+  first.dispatchEvent(new h.window.Event("input", { bubbles: true }));
+  assert.equal(last.value, "2026-11-20");
+  last.value = "";
+  last.dispatchEvent(new h.window.Event("input", { bubbles: true }));
+  assert.equal(last.hasAttribute("required"), false);
+  h.get("request-form").dispatchEvent(
+    new h.window.Event("submit", { bubbles: true, cancelable: true }),
+  );
+  await h.tick();
+  const input = h.calls.find((c) => c.name === "preview")!.args[0] as Input;
+  assert.equal(input.last, input.first);
+  assert.equal(last.value, first.value);
+  assert.equal(h.get("preview-hours").textContent, "7.25");
+});

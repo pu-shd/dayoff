@@ -14,6 +14,24 @@
         --line: #dce3d9;
         --muted: #5a6e63;
       }
+      [data-category="vacation"] {
+        --leave-background: #e4f1fc;
+        --leave-ink: #224e73;
+        --leave-border: #b8d7ef;
+        --leave-accent: #7db4de;
+      }
+      [data-category="sick"] {
+        --leave-background: #e4ebc5;
+        --leave-ink: #3d501a;
+        --leave-border: #bfce84;
+        --leave-accent: #88a646;
+      }
+      [data-category="personal"] {
+        --leave-background: #efe3f8;
+        --leave-ink: #603880;
+        --leave-border: #d6bcec;
+        --leave-accent: #a678c7;
+      }
       * {
         box-sizing: border-box;
       }
@@ -84,14 +102,15 @@
         margin-top: 26px;
       }
       .card {
-        background: var(--green);
-        color: #fff;
+        background: var(--leave-background, #eaf0e3);
+        color: var(--leave-ink, #203b33);
+        border: 1px solid var(--leave-border, var(--line));
         border-radius: 12px;
         padding: 22px;
       }
       .card span,
       .card small {
-        color: #d0ded3;
+        color: inherit;
       }
       .card strong {
         display: block;
@@ -108,6 +127,11 @@
         display: block;
         font-size: 14px;
         font-weight: 600;
+      }
+      label small {
+        display: block;
+        margin-top: 7px;
+        font-weight: 400;
       }
       input,
       select {
@@ -192,6 +216,16 @@
         letter-spacing: 0.6px;
         color: var(--muted);
       }
+      th[data-category],
+      td[data-category],
+      #records tr[data-category] td {
+        background: var(--leave-background, white);
+        color: var(--leave-ink, inherit);
+        border-bottom-color: var(--leave-border, var(--line));
+      }
+      #records tr[data-category] td:nth-child(2) {
+        font-weight: 600;
+      }
       td button {
         font-size: 12px;
         padding: 7px 9px;
@@ -210,14 +244,15 @@
       }
       #preview {
         margin-top: 28px;
-        border: 1px solid #b9c9b8;
+        border: 1px solid var(--leave-border, #b9c9b8);
         border-radius: 14px;
         overflow: hidden;
         background: #f9faf6;
       }
       .preview-top {
         padding: 24px;
-        background: #eaf0e3;
+        background: var(--leave-background, #eaf0e3);
+        color: var(--leave-ink, inherit);
         align-items: flex-start;
       }
       .preview-top h3 {
@@ -325,8 +360,10 @@
         margin-top: 18px;
       }
       .queue-item {
-        border: 1px solid var(--line);
-        border-left: 4px solid #a6b485;
+        border: 1px solid var(--leave-border, var(--line));
+        border-left: 4px solid var(--leave-accent, #a6b485);
+        background: var(--leave-background, white);
+        color: var(--leave-ink, inherit);
         border-radius: 10px;
         padding: 18px;
       }
@@ -493,8 +530,10 @@
               <label
                 >First date<input type="date" name="first" required /></label
               ><label
-                >Last date<input type="date" name="last" required
-              /></label>
+                >Last date<input type="date" name="last" /><small
+                  >Defaults to the first date.</small
+                ></label
+              >
               <label class="timed hide"
                 >Absent from<input
                   type="time"
@@ -686,12 +725,12 @@
                 <thead>
                   <tr>
                     <th>Month</th>
-                    <th>Vacation used</th>
-                    <th>Sick used</th>
-                    <th>Personal used</th>
-                    <th>Vacation closing</th>
-                    <th>Sick closing</th>
-                    <th>Personal closing</th>
+                    <th data-category="vacation">Vacation used</th>
+                    <th data-category="sick">Sick used</th>
+                    <th data-category="personal">Personal used</th>
+                    <th data-category="vacation">Vacation closing</th>
+                    <th data-category="sick">Sick closing</th>
+                    <th data-category="personal">Personal closing</th>
                   </tr>
                 </thead>
                 <tbody id="history-months"></tbody>
@@ -733,7 +772,7 @@
     <script>
       'use strict';
       const focus = <?!= focus ?>;
-      let state, pendingInput, historyYear, historyKey, historyLoad = 0, working = false;
+      let state, pendingInput, historyYear, historyKey, historyLoad = 0, working = false, lastDateAutomatic = true;
       const $ = id => document.getElementById(id);
       const money = n => (n / 100).toFixed(2);
       const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
@@ -765,6 +804,7 @@
         action('confirmCalm',r.id,r.version);
       }
       function renderPreview(r) {
+       $('preview').setAttribute('data-category',r.input.category);
        $('preview-title').textContent=cap(r.input.category)+' leave';
        $('preview-date').textContent=range(r);
        $('preview-hours').textContent=money(r.days.reduce((n,d)=>n+d.hours,0));
@@ -806,8 +846,8 @@
         $('history-source').textContent=y.source.name+' · internal label '+(y.source.headerYear||'absent')+(y.fiscalYear===state.history.anchorFiscalYear?' · workbook balance anchor':'');
         $('history-warnings').replaceChildren(...y.warnings.map(w=>text('p',w)));
         $('history-summary').replaceChildren();
-        for(const c of ['vacation','sick','personal']){const card=text('div','','card');card.append(text('span',cap(c)+' used in source'),text('strong',money(y.totals[c])+' h'),text('small','Workbook closing: '+(y.balances[c]===null?'unavailable':money(y.balances[c])+' h')));$('history-summary').append(card);}
-        $('history-months').replaceChildren(...y.months.map(m=>{const row=historyTableRow([m.month,...['vacation','sick','personal'].map(c=>money(m[c])),...['vacation','sick','personal'].map(c=>m.balances[c]===null?'Unavailable':money(m.balances[c]))]);row.firstElementChild.replaceChildren(calendarMonthLink(m.month));return row;}));
+        for(const c of ['vacation','sick','personal']){const card=text('div','','card');card.setAttribute('data-category',c);card.append(text('span',cap(c)+' used in source'),text('strong',money(y.totals[c])+' h'),text('small','Workbook closing: '+(y.balances[c]===null?'unavailable':money(y.balances[c])+' h')));$('history-summary').append(card);}
+        $('history-months').replaceChildren(...y.months.map(m=>{const row=historyTableRow([m.month,...['vacation','sick','personal'].map(c=>money(m[c])),...['vacation','sick','personal'].map(c=>m.balances[c]===null?'Unavailable':money(m.balances[c]))]);row.firstElementChild.replaceChildren(calendarMonthLink(m.month));for(let i=1;i<7;i++)row.children[i].setAttribute('data-category',['vacation','sick','personal'][(i-1)%3]);return row;}));
         $('history-daily').replaceChildren(...y.daily.map(d=>historyTableRow([d.date,d.cell,d.mark])));
         $('history-daily-count').textContent=y.daily.length+' daily source markings';
         $('history-legend').textContent='Source legend: '+y.legend.map(e=>e.mark).join(' · ');
@@ -836,13 +876,13 @@
        $('setup').classList.toggle('hide',s.initialized);$('content').classList.toggle('hide',!s.initialized);
        $('cards').replaceChildren();
        for(const [key,label] of [['vacation','Vacation'],['sick','Sick'],['personal','Personal']]){
-        const card=text('div','','card');card.append(text('span',label+' available now'),text('strong',money(s.totals.available[key])+' h'),text('small',money(s.totals.used[key])+' used · '+money(s.totals.planned[key])+' planned · '+money(s.totals.projected[key])+' projected at FY end'));$('cards').append(card);
+        const card=text('div','','card');card.setAttribute('data-category',key);card.append(text('span',label+' available now'),text('strong',money(s.totals.available[key])+' h'),text('small',money(s.totals.used[key])+' used · '+money(s.totals.planned[key])+' planned · '+money(s.totals.projected[key])+' projected at FY end'));$('cards').append(card);
        }
        $('full').textContent=money(s.config.policy.fullDay);$('half').textContent=money(s.config.policy.halfDay);$('ledger').href=s.ledgerUrl;
        $('record-note').textContent='Imported monthly totals are assigned to month-end, so balances within an imported month are approximate. Avoid re-entering leave already included in those totals.';
        const queue=s.records.filter(outstanding);$('calm-count').textContent=queue.length+' outstanding';$('calm-queue').replaceChildren();$('calm-empty').classList.toggle('hide',queue.length!==0);
        for(const r of queue.sort((a,b)=>a.days[0].date.localeCompare(b.days[0].date))){
-        const item=text('article','','queue-item'+(r.calm==='correction'?' correction':''));item.id='calm-'+r.id;
+        const item=text('article','','queue-item'+(r.calm==='correction'?' correction':''));item.id='calm-'+r.id;item.setAttribute('data-category',r.input.category);
         const top=text('div','','queue-top');top.append(text('h3',cap(r.input.category)+' · '+money(r.days.reduce((n,d)=>n+d.hours,0))+' hours'),text('span',r.calm==='correction'?'Correction needed':'Entry needed','badge'));
         item.append(top,text('p',range(r)),text('p',r.days.map(d=>d.date+' · '+money(d.hours)+' h').join(' / '),'muted'));
         const controls=text('div','','actions');controls.append(button(r.calm==='correction'?'Confirm CALM corrected':'Confirm entered in CALM',()=>confirmEntry(r)));item.append(controls);$('calm-queue').append(item);
@@ -861,7 +901,7 @@
        $('install').textContent=s.reminders.enabled?'Update reminder schedule':'Enable weekday reminders';
        const tbody=$('records');tbody.replaceChildren();
        for(const r of [...s.records].sort((a,b)=>b.days[0].date.localeCompare(a.days[0].date))){
-        const row=document.createElement('tr'), d=r.days[0];
+        const row=document.createElement('tr'), d=r.days[0];row.setAttribute('data-category',r.input.category);
         row.append(text('td',r.legacy?d.date.slice(0,7)+' (monthly)':d.date+(r.days.length>1?' – '+r.days.at(-1).date:'')),text('td',cap(r.input.category)+(r.status==='cancelled'?' · cancelled':'')),text('td',money(r.days.reduce((n,x)=>n+x.hours,0))));
         row.append(text('td',r.legacy?'Historical; CALM unverified':'CALM: '+r.calm+' · Calendar: '+r.calendar+' · Email: '+r.email+(r.email==='skipped'?'':r.input.emailTo?' to '+r.input.emailTo:'')));
         const controls=document.createElement('td');
@@ -880,9 +920,18 @@
       }
       function invalidate(){pendingInput=null;$('preview').classList.add('hide');}
       $('length').addEventListener('change',()=>{document.querySelectorAll('.timed').forEach(e=>e.classList.toggle('hide',$('length').value==='full'));invalidate();});
+      function defaultLastDate() {
+       const first=document.querySelector('[name=first]'),last=document.querySelector('[name=last]');
+       if(!last.value || lastDateAutomatic){last.value=first.value;lastDateAutomatic=true;}
+      }
+      const firstDate=document.querySelector('[name=first]'),lastDate=document.querySelector('[name=last]');
+      for(const event of ['input','change']){
+       firstDate.addEventListener(event,defaultLastDate);
+       lastDate.addEventListener(event,()=>{lastDateAutomatic=!lastDate.value;});
+      }
       $('request-form').addEventListener('input',invalidate);
       $('request-form').addEventListener('submit',async e=>{
-       e.preventDefault();busy(true);
+       e.preventDefault();busy(true);if(!lastDate.value)defaultLastDate();
        const input=Object.fromEntries(new FormData(e.target));pendingInput={...input,id:crypto.randomUUID(),emailTo:$('email-choice').value};
        try{renderPreview(await rpc('preview',pendingInput));message('Review the dates, hours, and email choice. Nothing has been saved or sent.');}
        catch(err){message(err.message,true);invalidate();}finally{busy(false);}

@@ -86,7 +86,7 @@ The first adapter sends using Google `MailApp` as the deploying Google account. 
 
 While delivery is disabled, use **Send test email to me** under CALM reminders. The test sends only to the configured owner and creates no leave request or Calendar event. It requires a fresh confirmation nonce and permits one attempt per minute. A success means MailApp accepted the message; confirm actual arrival in your normal mailbox, including Junk. If it fails or does not arrive, retain preview mode while a Microsoft 365 adapter is configured.
 
-Verify the sender, management recipients, Calendar ID, schedules, holidays, and policy. Set `delivery: "google"` locally and run `./scripts/update.sh`. Preview shows a request summary, daily hours, Calendar title, and the exact email draft. Nothing is saved or sent until you choose Save.
+Verify the sender, management recipients, Calendar ID, schedules, holidays, and policy. Set `delivery: "google"` locally and run `./scripts/update.sh`. Preview shows a request summary, daily hours, Calendar title, and the exact email draft. Entering the first date fills the last date automatically; it follows the first date until you enter an explicit last date. Leaving the last date blank at preview uses the first date. Nothing is saved or sent until you choose Save.
 
 Request email defaults to **Email me a copy to resend**. You can instead select **Email the configured management recipients** or **No request email**. Saving always records the leave and updates Calendar; CALM tracking works with all three email choices. Each request retains its recipient choice for retries and cancellation notices. A new request defaults to self again.
 
@@ -99,6 +99,8 @@ Choose a reminder hour and select **Enable weekday reminders**. The app retains 
 Digests go only to your owner email, independently of request-email choices. They include every outstanding date and its hours. No digest is sent when the checklist is empty. At most one digest is attempted per local date; uncertain sends are not automatically repeated that day. A cancellation after CALM entry remains on the correction checklist until you confirm it.
 
 ## Balances and imported history
+
+Vacation information uses light blue, sick uses pea green, and personal uses purple across balance cards, history columns, request previews, records, and the CALM checklist. Category names remain visible alongside the colors.
 
 Current vacation includes accrual through completed months. FY-end projection includes future accrual and planned usage, applying the cap each month after usage. CALM confirmation is a personal assertion, not verification against PeopleSoft.
 
