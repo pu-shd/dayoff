@@ -444,7 +444,7 @@ function doGet(e: GoogleAppsScript.Events.DoGet) {
   }).replace(/</g, "\\u003c");
   return template
     .evaluate()
-    .setTitle("Dayoff")
+    .setTitle("Day Off")
     .addMetaTag("viewport", "width=device-width, initial-scale=1");
 }
 function getDashboard() {

@@ -478,7 +478,12 @@ test("date rows can be added and removed with independent defaults and one group
   h.get("send").click();
   await h.tick();
   assert.equal(h.calls.filter((c) => c.name === "createRequest").length, 1);
-  assert.equal(h.get("records").children.length, 4);
+  assert.equal(h.get("records").children.length, 1);
+  assert.equal(h.get("records").querySelectorAll("[data-date]").length, 4);
+  assert.equal(
+    h.get("records").querySelector("details")!.hasAttribute("open"),
+    false,
+  );
   assert.equal(h.get("calm-count").textContent, "1 outstanding");
   h.get("add-dates").click();
   rows = [...h.get("date-rows").querySelectorAll<HTMLElement>(".date-row")];
@@ -500,9 +505,9 @@ test("individual date removal preserves remaining entries and shows only the CAL
   r.calm = "entered";
   const h = harness([r]);
   await h.tick();
-  const row = [...h.get("records").children].find((row) =>
-    row.textContent!.includes("2026-11-17"),
-  )!;
+  const details = h.get("records").querySelector("details")!;
+  details.setAttribute("open", "");
+  const row = h.get("records").querySelector('[data-date="2026-11-17"]')!;
   const remove = [...row.querySelectorAll<HTMLButtonElement>("button")].find(
     (b) => b.textContent === "Remove date",
   )!;
@@ -510,10 +515,68 @@ test("individual date removal preserves remaining entries and shows only the CAL
   await h.tick();
   const call = h.calls.find((c) => c.name === "removeRequestDate")!;
   assert.deepEqual(call.args.slice(1), [r.id, 1, "2026-11-17"]);
-  assert.equal(h.get("records").children.length, 3);
+  assert.equal(h.get("records").children.length, 1);
+  assert.equal(h.get("records").querySelectorAll("[data-date]").length, 3);
+  assert.equal(
+    h.get("records").querySelector("details")!.hasAttribute("open"),
+    true,
+  );
   assert.match(h.get("calm-queue").textContent!, /2026-11-17/);
   assert.doesNotMatch(
     h.get("calm-queue").textContent!,
     /2026-11-16|2026-11-18/,
   );
+});
+
+test("Day Off uses the requested header and keeps balance details and history collapsed initially", async () => {
+  const h = harness([], undefined, historyFixture());
+  await h.tick();
+  assert.equal(h.document.querySelector("h1")?.textContent, "Day Off");
+  assert.equal(
+    h.get("tagline").textContent,
+    "A individual ledger for tracking time.",
+  );
+  assert.doesNotMatch(
+    h.document.querySelector("header")!.textContent!,
+    /A little less administration/i,
+  );
+  const details = [...h.get("cards").querySelectorAll("details")];
+  assert.equal(details.length, 3);
+  assert.equal(
+    details.some((n) => n.hasAttribute("open")),
+    false,
+  );
+  assert.equal(h.get("history-section").tagName, "DETAILS");
+  assert.equal(h.get("history-section").hasAttribute("open"), false);
+  assert.match(
+    h.get("history-section").querySelector("summary")!.textContent!,
+    /Attendance history/,
+  );
+  assert.doesNotMatch(
+    h.get("history-section").textContent!,
+    /Your workbook archive/i,
+  );
+});
+
+test("legacy month disclosures label calculated posting dates without inventing daily charges", async () => {
+  const r = record({
+    id: "legacy-example",
+    category: "vacation",
+    mode: "full",
+    first: "2026-11-30",
+    last: "2026-11-30",
+  });
+  r.legacy = true;
+  r.calm = "historical";
+  const h = harness([r]);
+  await h.tick();
+  const disclosure = h.get("records").querySelector("details")!;
+  assert.ok(disclosure);
+  assert.equal(disclosure.hasAttribute("open"), false);
+  assert.match(disclosure.textContent!, /2026-11-30/);
+  assert.match(
+    disclosure.textContent!,
+    /Exact daily charges cannot be inferred/,
+  );
+  assert.equal(disclosure.querySelector("button"), null);
 });

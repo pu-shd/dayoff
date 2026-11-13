@@ -3,16 +3,17 @@
   <head>
     <meta charset="utf-8" />
     <base target="_top" />
-    <title>Dayoff</title>
+    <title>Day Off</title>
     <style>
       :root {
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-        color: #203b33;
-        background: #f4f5f0;
+        color: #49372d;
+        background: #f2e8dc;
         font-size: 16px;
-        --green: #214e40;
-        --line: #dce3d9;
-        --muted: #5a6e63;
+        --brown: #6b4f3a;
+        --line: #dfd0bd;
+        --muted: #78624e;
+        --surface: #fffaf3;
       }
       [data-category="vacation"] {
         --leave-background: #e4f1fc;
@@ -41,7 +42,7 @@
       main {
         max-width: 1120px;
         margin: auto;
-        padding: 36px 22px;
+        padding: 28px 22px;
       }
       header,
       .heading,
@@ -56,6 +57,14 @@
         font-size: 38px;
         letter-spacing: -1.5px;
         margin: 0;
+      }
+      #tagline {
+        margin: 8px 0 4px;
+        font-size: 15px;
+      }
+      #subtitle {
+        margin: 4px 0 0;
+        font-size: 13px;
       }
       h2 {
         font-size: 23px;
@@ -78,35 +87,36 @@
         letter-spacing: 1.8px;
         text-transform: uppercase;
         font-weight: 650;
-        color: #65765c;
+        color: #896e53;
         margin: 0 0 9px;
       }
       .badge {
-        background: #e5ebdf;
+        background: #e9ddcc;
         border-radius: 20px;
         padding: 7px 13px;
         font-size: 12px;
         white-space: nowrap;
       }
       .panel {
-        background: white;
+        background: var(--surface);
         border: 1px solid var(--line);
         border-radius: 16px;
         padding: 26px;
-        margin-top: 24px;
+        margin-top: 20px;
       }
       .cards {
         display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 14px;
-        margin-top: 26px;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+        margin-top: 20px;
       }
       .card {
-        background: var(--leave-background, #eaf0e3);
-        color: var(--leave-ink, #203b33);
-        border: 1px solid var(--leave-border, var(--line));
-        border-radius: 12px;
-        padding: 22px;
+        background: var(--surface);
+        color: var(--leave-ink, #49372d);
+        border: 1px solid var(--line);
+        border-left: 4px solid var(--leave-accent, #b1916a);
+        border-radius: 10px;
+        padding: 14px 16px;
       }
       .card span,
       .card small {
@@ -114,9 +124,51 @@
       }
       .card strong {
         display: block;
-        font-size: 34px;
+        font-size: 28px;
         font-weight: 500;
-        margin: 12px 0;
+        margin: 6px 0;
+      }
+      .card span {
+        font-size: 13px;
+      }
+      .card details {
+        font-size: 12px;
+        margin-top: 6px;
+      }
+      .card details small {
+        display: block;
+        margin-top: 8px;
+        line-height: 1.5;
+      }
+      summary {
+        cursor: pointer;
+      }
+      .history-panel > summary {
+        margin-left: 16px;
+        padding-left: 3px;
+        font-size: 20px;
+        font-weight: 600;
+      }
+      .history-panel > summary .badge {
+        float: right;
+        font-weight: 400;
+      }
+      .history-panel[open] > summary {
+        margin-bottom: 20px;
+      }
+      .record-dates > summary {
+        font-weight: 600;
+      }
+      .record-dates .table-wrap {
+        margin-top: 12px;
+      }
+      .record-dates table {
+        min-width: 460px;
+        font-size: 12px;
+      }
+      .record-dates th,
+      .record-dates td {
+        padding: 10px 8px;
       }
       .date-row {
         min-width: 0;
@@ -167,18 +219,18 @@
         width: 100%;
         margin-top: 8px;
         padding: 11px 12px;
-        border: 1px solid #afbeb0;
+        border: 1px solid #bfa98e;
         border-radius: 8px;
-        background: white;
+        background: var(--surface);
         font: inherit;
         color: inherit;
       }
       button,
       .button {
         display: inline-block;
-        border: 1px solid var(--green);
+        border: 1px solid var(--brown);
         border-radius: 8px;
-        background: var(--green);
+        background: var(--brown);
         color: white;
         padding: 11px 16px;
         font: inherit;
@@ -186,11 +238,11 @@
         text-decoration: none;
       }
       button.secondary {
-        background: white;
-        color: var(--green);
+        background: var(--surface);
+        color: var(--brown);
       }
       button.danger {
-        background: white;
+        background: var(--surface);
         color: #963e34;
         border-color: #d5bbb4;
       }
@@ -214,7 +266,7 @@
       .status {
         padding: 14px 18px;
         border-radius: 9px;
-        background: #e9eedb;
+        background: #eee2d0;
         white-space: pre-wrap;
         line-height: 1.5;
         margin-top: 18px;
@@ -235,7 +287,7 @@
       th,
       td {
         padding: 14px 10px;
-        border-bottom: 1px solid #e5e9e1;
+        border-bottom: 1px solid #e6d8c5;
         vertical-align: top;
       }
       th {
@@ -247,7 +299,7 @@
       th[data-category],
       td[data-category],
       #records tr[data-category] td {
-        background: var(--leave-background, white);
+        background: var(--surface);
         color: var(--leave-ink, inherit);
         border-bottom-color: var(--leave-border, var(--line));
       }
@@ -260,7 +312,7 @@
         margin: 0 6px 6px 0;
       }
       a {
-        color: var(--green);
+        color: var(--brown);
       }
       .hide {
         display: none !important;
@@ -272,14 +324,14 @@
       }
       #preview {
         margin-top: 28px;
-        border: 1px solid var(--leave-border, #b9c9b8);
+        border: 1px solid var(--leave-border, #cdb698);
         border-radius: 14px;
         overflow: hidden;
-        background: #f9faf6;
+        background: #fcf5eb;
       }
       .preview-top {
         padding: 24px;
-        background: var(--leave-background, #eaf0e3);
+        background: var(--leave-background, #ede0ce);
         color: var(--leave-ink, inherit);
         align-items: flex-start;
       }
@@ -320,7 +372,7 @@
         padding: 18px;
         border-radius: 10px;
         border: 1px solid var(--line);
-        background: white;
+        background: var(--surface);
       }
       .summary-box p {
         margin: 0;
@@ -339,7 +391,7 @@
       }
       .draft {
         margin-top: 18px;
-        background: white;
+        background: var(--surface);
         border: 1px solid var(--line);
         border-radius: 10px;
       }
@@ -365,7 +417,7 @@
       .preview-footer {
         padding: 18px 24px;
         border-top: 1px solid var(--line);
-        background: white;
+        background: var(--surface);
       }
       .preview-footer p {
         font-size: 13px;
@@ -389,8 +441,8 @@
       }
       .queue-item {
         border: 1px solid var(--leave-border, var(--line));
-        border-left: 4px solid var(--leave-accent, #a6b485);
-        background: var(--leave-background, white);
+        border-left: 4px solid var(--leave-accent, #b1916a);
+        background: var(--surface);
         color: var(--leave-ink, inherit);
         border-radius: 10px;
         padding: 18px;
@@ -409,7 +461,7 @@
         margin-top: 12px;
       }
       .empty {
-        border: 1px dashed #b9c9b8;
+        border: 1px dashed #cdb698;
         border-radius: 10px;
         padding: 22px;
         margin-top: 18px;
@@ -437,13 +489,34 @@
         main {
           padding: 24px 14px;
         }
-        .cards,
         .grid,
         .date-row .grid {
           grid-template-columns: 1fr;
         }
         .panel {
           padding: 18px;
+        }
+        .card {
+          padding: 10px 8px;
+        }
+        .card strong {
+          font-size: 20px;
+        }
+        .card span {
+          font-size: 11px;
+          display: block;
+          min-height: 2.6em;
+        }
+        .card details {
+          font-size: 11px;
+        }
+        .history-panel > summary {
+          font-size: 18px;
+        }
+        .history-panel > summary .badge {
+          float: none;
+          display: inline-block;
+          margin-left: 6px;
         }
         .preview-top,
         .preview-body {
@@ -495,7 +568,7 @@
         }
         .card {
           background: white;
-          color: #203b33;
+          color: #49372d;
           border: 1px solid;
         }
         .card span,
@@ -509,8 +582,8 @@
     <main>
       <header>
         <div>
-          <p class="eyebrow">A little less administration</p>
-          <h1>Dayoff</h1>
+          <h1>Day Off</h1>
+          <p id="tagline">A individual ledger for tracking time.</p>
           <p id="subtitle" class="muted">
             Your leave, calendar, and CALM checklist.
           </p>
@@ -730,7 +803,7 @@
             <table>
               <thead>
                 <tr>
-                  <th>Date / month</th>
+                  <th>Dates / month</th>
                   <th>Leave</th>
                   <th>Hours</th>
                   <th>Progress</th>
@@ -749,14 +822,10 @@
             >
           </div>
         </section>
-        <section class="panel hide" id="history-section">
-          <div class="heading">
-            <div>
-              <p class="eyebrow">Your workbook archive</p>
-              <h2>Attendance history</h2>
-            </div>
-            <span class="badge" id="history-count"></span>
-          </div>
+        <details class="panel history-panel hide" id="history-section">
+          <summary>
+            Attendance history <span class="badge" id="history-count"></span>
+          </summary>
           <p class="section-note muted" id="history-note"></p>
           <button id="import-history" class="secondary hide">
             Import attendance history
@@ -814,7 +883,7 @@
               <p id="history-unmapped" class="muted"></p>
             </details>
           </div>
-        </section>
+        </details>
       </div>
       <footer>
         CALM remains the official record. These are your personal calculations.
@@ -853,12 +922,13 @@
        finally {busy(false);}
       }
       function text(tag,value,cls) {const node=document.createElement(tag);node.textContent=value;if(cls)node.className=cls;return node;}
+      function statDetails(label,value) {const details=document.createElement('details');details.append(text('summary',label),text('small',value));return details;}
       function button(label,callback,cls='secondary') {const b=text('button',label,cls);b.type='button';b.addEventListener('click',callback);return b;}
       function activeDays(r) {return r.status==='cancelled'?[]:r.days.filter(d=>!r.cancelledDates?.includes(d.date));}
       function calmDays(r) {return r.calm==='correction'?r.days.filter(d=>(r.calmCorrectionDates??(r.status==='cancelled'?r.days.map(x=>x.date):[])).includes(d.date)):activeDays(r);}
-      function dateList(days) {
+      function dateList(days,format=date) {
        const spans=[];for(const d of days){const previous=spans.at(-1);if(previous && new Date(previous.at(-1).date+'T12:00:00Z').getTime()+86400000===new Date(d.date+'T12:00:00Z').getTime())previous.push(d);else spans.push([d]);}
-       return spans.map(span=>date(span[0].date)+(span.length>1?' – '+date(span.at(-1).date):'')).join(', ');
+       return spans.map(span=>format(span[0].date)+(span.length>1?' – '+format(span.at(-1).date):'')).join(', ');
       }
       function range(r) {return dateList(activeDays(r).length?activeDays(r):r.days);}
       function confirmEntry(r) {
@@ -909,7 +979,7 @@
         $('history-source').textContent=y.source.name+' · internal label '+(y.source.headerYear||'absent')+(y.fiscalYear===state.history.anchorFiscalYear?' · workbook balance anchor':'');
         $('history-warnings').replaceChildren(...y.warnings.map(w=>text('p',w)));
         $('history-summary').replaceChildren();
-        for(const c of ['vacation','sick','personal']){const card=text('div','','card');card.setAttribute('data-category',c);card.append(text('span',cap(c)+' used in source'),text('strong',money(y.totals[c])+' h'),text('small','Workbook closing: '+(y.balances[c]===null?'unavailable':money(y.balances[c])+' h')));$('history-summary').append(card);}
+        for(const c of ['vacation','sick','personal']){const card=text('div','','card');card.setAttribute('data-category',c);card.append(text('span',cap(c)+' used'),text('strong',money(y.totals[c])+' h'),statDetails('Closing balance',y.balances[c]===null?'Unavailable':money(y.balances[c])+' h'));$('history-summary').append(card);}
         $('history-months').replaceChildren(...y.months.map(m=>{const row=historyTableRow([m.month,...['vacation','sick','personal'].map(c=>money(m[c])),...['vacation','sick','personal'].map(c=>m.balances[c]===null?'Unavailable':money(m.balances[c]))]);row.firstElementChild.replaceChildren(calendarMonthLink(m.month));for(let i=1;i<7;i++)row.children[i].setAttribute('data-category',['vacation','sick','personal'][(i-1)%3]);return row;}));
         $('history-daily').replaceChildren(...y.daily.map(d=>historyTableRow([d.date,d.cell,d.mark])));
         $('history-daily-count').textContent=y.daily.length+' daily source markings';
@@ -939,7 +1009,7 @@
        $('setup').classList.toggle('hide',s.initialized);$('content').classList.toggle('hide',!s.initialized);
        $('cards').replaceChildren();
        for(const [key,label] of [['vacation','Vacation'],['sick','Sick'],['personal','Personal']]){
-        const card=text('div','','card');card.setAttribute('data-category',key);card.append(text('span',label+' available now'),text('strong',money(s.totals.available[key])+' h'),text('small',money(s.totals.used[key])+' used · '+money(s.totals.planned[key])+' planned · '+money(s.totals.projected[key])+' projected at FY end'));$('cards').append(card);
+        const card=text('div','','card');card.setAttribute('data-category',key);card.append(text('span',label+' available'),text('strong',money(s.totals.available[key])+' h'),statDetails('Details',money(s.totals.used[key])+' used · '+money(s.totals.planned[key])+' planned · '+money(s.totals.projected[key])+' projected at FY end'));$('cards').append(card);
        }
        $('full').textContent=money(s.config.policy.fullDay);$('half').textContent=money(s.config.policy.halfDay);$('ledger').href=s.ledgerUrl;
        $('record-note').textContent='Imported monthly totals are assigned to month-end, so balances within an imported month are approximate. Avoid re-entering leave already included in those totals. Dates submitted together share one request email and CALM confirmation; individual dates can be removed below.';
@@ -963,28 +1033,37 @@
        $('reminder-recipient').textContent=s.reminders.recipient;
        $('reminder-last').textContent=s.reminders.attemptState==='unknown'||s.reminders.attemptState==='sending'?'The latest send outcome is uncertain. Check your inbox before retrying.':s.reminders.lastSentDate?'Last reminder sent: '+s.reminders.lastSentDate+'.':'No reminder has been sent yet.';
        $('install').textContent=s.reminders.enabled?'Update reminder schedule':'Enable weekday reminders';
-       const tbody=$('records');tbody.replaceChildren();
+       const tbody=$('records'),expanded=new Set([...tbody.querySelectorAll('details[open]')].map(node=>node.dataset.requestId));tbody.replaceChildren();
        for(const r of [...s.records].sort((a,b)=>b.days[0].date.localeCompare(a.days[0].date))){
-        const remaining=activeDays(r);
-        for(const [index,d] of r.days.entries()){
-         const removed=r.status==='cancelled' || r.cancelledDates?.includes(d.date),row=document.createElement('tr');row.setAttribute('data-category',r.input.category);
-         const dateCell=text('td',r.legacy?d.date.slice(0,7)+' (monthly)':d.date);
-         if(!r.legacy && index===0 && r.days.length>1)dateCell.append(text('small','Submitted together: '+dateList(r.days)));
-         row.append(dateCell,text('td',cap(r.input.category)+(removed?' · removed':'')),text('td',money(d.hours)));
-         const calm=removed?(r.calm==='correction' && calmDays(r).some(x=>x.date===d.date)?'correction':'no outstanding action'):r.calm==='correction'?'entered':r.calm;
-         row.append(text('td',r.legacy?'Historical; CALM unverified':'CALM: '+calm+' · Calendar: '+r.calendar+' · Email: '+r.email+(r.email==='skipped'?'':r.input.emailTo?' to '+r.input.emailTo:'')));
-         const controls=document.createElement('td');
-         if(!r.legacy){
+        const remaining=activeDays(r),row=document.createElement('tr');row.setAttribute('data-category',r.input.category);
+        const dateCell=document.createElement('td');
+        if(r.legacy){const details=document.createElement('details');details.className='record-dates';details.append(text('summary',r.days[0].date.slice(0,7)+' (monthly)'),text('p','Imported month-end posting: '+r.days[0].date+'. Exact daily charges cannot be inferred from this monthly total. See Attendance History for original daily markings.','muted'));dateCell.append(details);}
+        else {
+         const details=document.createElement('details');details.className='record-dates';details.dataset.requestId=r.id;if(expanded.has(r.id))details.setAttribute('open','');
+         details.append(text('summary',remaining.length+' active '+(remaining.length===1?'date':'dates')+(remaining.length<r.days.length?' · '+(r.days.length-remaining.length)+' removed':'')+' · '+dateList(remaining.length?remaining:r.days,d=>d.slice(5).replace('-','/'))));
+         const wrap=text('div','','table-wrap'),table=document.createElement('table'),thead=document.createElement('thead'),tr=document.createElement('tr');
+         for(const label of ['Date','Hours','CALM','Actions'])tr.append(text('th',label));thead.append(tr);table.append(thead);
+         const body=document.createElement('tbody');
+         for(const d of r.days){
+          const removed=r.status==='cancelled' || r.cancelledDates?.includes(d.date),dayRow=document.createElement('tr');dayRow.dataset.date=d.date;dayRow.setAttribute('data-category',r.input.category);
+          const calm=removed?(r.calm==='correction' && calmDays(r).some(x=>x.date===d.date)?'correction':'no outstanding action'):r.calm==='correction'?'entered':r.calm;
+          dayRow.append(text('td',d.date+(removed?' · removed':'')),text('td',money(d.hours)),text('td',calm));
+          const controls=document.createElement('td');
           if(!removed)controls.append(button('Remove date',()=>{if(confirm('Remove '+date(d.date)+' ('+money(d.hours)+' hours) from this request? Other dates stay in place. Correct CALM if it was already entered.'))action('removeRequestDate',r.id,r.version,d.date);},'danger'));
-          if(index===0){
-           if(outstanding(r))controls.append(button(r.calm==='correction'?'Confirm CALM corrected':'Confirm request entered in CALM',()=>confirmEntry(r)));
-           if(r.calendar==='pending'||r.email==='pending')controls.append(button('Retry incomplete steps',()=>action('retryRequest',r.id)));
-           if(r.email==='unknown'||r.email==='sending')controls.append(button('Confirm email received',()=>{if(confirm('Confirm receipt or an administrator-verified delivery trace.'))action('resolveEmail',r.id,r.version,true);}));
-           if(remaining.length>1)controls.append(button('Cancel all remaining dates',()=>{if(confirm('Cancel all remaining dates in this request and remove their Calendar events? Any CALM corrections stay on your checklist.'))action('cancelRequest',r.id,r.version);},'danger'));
-          }
+          dayRow.append(controls);body.append(dayRow);
          }
-         row.append(controls);tbody.append(row);
+         table.append(body);wrap.append(table);details.append(wrap);dateCell.append(details);
         }
+        row.append(dateCell,text('td',cap(r.input.category)+(r.status==='cancelled'?' · cancelled':'')),text('td',money((r.legacy?r.days:remaining).reduce((sum,d)=>sum+d.hours,0))));
+        row.append(text('td',r.legacy?'Historical; CALM unverified':'CALM: '+r.calm+' · Calendar: '+r.calendar+' · Email: '+r.email));
+        const controls=document.createElement('td');
+        if(!r.legacy){
+         if(outstanding(r))controls.append(button(r.calm==='correction'?'Confirm CALM corrected':'Confirm request entered in CALM',()=>confirmEntry(r)));
+         if(r.calendar==='pending'||r.email==='pending')controls.append(button('Retry incomplete steps',()=>action('retryRequest',r.id)));
+         if(r.email==='unknown'||r.email==='sending')controls.append(button('Confirm email received',()=>{if(confirm('Confirm receipt or an administrator-verified delivery trace.'))action('resolveEmail',r.id,r.version,true);}));
+         if(remaining.length)controls.append(button('Cancel all remaining dates',()=>{if(confirm('Cancel all remaining dates in this request and remove their Calendar events? Any CALM corrections stay on your checklist.'))action('cancelRequest',r.id,r.version);},'danger'));
+        }
+        row.append(controls);tbody.append(row);
        }
        for(const input of document.querySelectorAll('[name=first],[name=last]')){input.min=s.fiscalPeriod.start;input.max=s.fiscalPeriod.end;}
        renderHistory(s.history);
