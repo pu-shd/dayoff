@@ -24,5 +24,5 @@ else
  npx --no-install clasp --json create-deployment --description "Dayoff initial owner-only trial" > local/deployment.next.json
 fi
 mv local/deployment.next.json local/deployment.json
-node -e 'const d=JSON.parse(require("fs").readFileSync("local/deployment.json"));console.log("https://script.google.com/macros/s/"+d.deploymentId+"/exec")'
+npx --no-install tsx scripts/resolve-deployment.ts
 print "Google may require first-use OAuth consent."

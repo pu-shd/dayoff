@@ -39,6 +39,12 @@ A successor deploys their own app rather than inheriting OAuth tokens. Transfer 
 
 ## CLI limitations
 
+Use the canonical web app URL printed by deployment, which is read from Google's deployment metadata. Workspace accounts can receive a domain-specific `/a/macros/DOMAIN/s/.../exec` address; do not replace it with a guessed generic URL.
+
+If Google shows "Sorry, unable to open the file at this time," first use the canonical URL while signed into the deployment owner's account. For multi-account routing problems, try a private browser window signed into only that account, as described in [Google's troubleshooting guide](https://developers.google.com/apps-script/guides/support/troubleshooting#issues_with_multiple_google_accounts).
+
+Google may show an unverified-app notice during first-use consent. The private app has not been submitted for public OAuth verification. Review the project/account and requested permissions before authorizing; deployment does not itself grant runtime consent. See [Google's authorization documentation](https://developers.google.com/apps-script/guides/services/authorization).
+
 The Apps Script API creates, uploads and deploys source; it cannot grant runtime consent for you. Resolve administrator scope restrictions through normal Google administration. Do not make the web app anonymous to bypass consent.
 
 Only source and generic examples belong in Git. Keep workbooks, imports, live settings, credentials, and build output private. Builds embed imported attendance data and must never be uploaded as public artifacts.
