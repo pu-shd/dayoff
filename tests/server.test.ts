@@ -29,6 +29,10 @@ function harness(
     hour: number;
     zone: string;
   }[] = [];
+  const calendarWrites: string[] = [];
+  let beforeWrite: (() => void) | undefined;
+  let etagVersion = 0;
+  let failRead = false;
   let today = "2026-11-13",
     failMail = false;
   let identity = cfg.ownerEmail,
@@ -103,16 +107,57 @@ function harness(
     },
     Calendar: {
       Events: {
+        get: (_calendar: string, id: string) => {
+          if (failRead) throw Error("503 service unavailable");
+          const e = events.get(id);
+          if (!e) throw Error("404 Not Found");
+          return structuredClone(e);
+        },
         insert: (e: GoogleAppsScript.Calendar.Schema.Event) => {
+          const hook = beforeWrite;
+          beforeWrite = undefined;
+          hook?.();
           if (events.has(e.id!)) throw Error("409 duplicate");
-          events.set(e.id!, e);
+          calendarWrites.push("insert");
+          events.set(e.id!, {
+            ...structuredClone(e),
+            etag: `version-${++etagVersion}`,
+          });
         },
         patch: (
           e: GoogleAppsScript.Calendar.Schema.Event,
           _calendar: string,
           id: string,
-        ) => events.set(id, e),
-        remove: (_calendar: string, id: string) => events.delete(id),
+          _options?: object,
+          headers?: Record<string, string>,
+        ) => {
+          const hook = beforeWrite;
+          beforeWrite = undefined;
+          hook?.();
+          const current = events.get(id);
+          if (headers?.["If-Match"] !== current?.etag)
+            throw Error("412 Precondition Failed");
+          calendarWrites.push("patch");
+          events.set(id, {
+            ...current,
+            ...structuredClone(e),
+            etag: `version-${++etagVersion}`,
+          });
+        },
+        remove: (
+          _calendar: string,
+          id: string,
+          _options?: object,
+          headers?: Record<string, string>,
+        ) => {
+          const hook = beforeWrite;
+          beforeWrite = undefined;
+          hook?.();
+          if (headers?.["If-Match"] !== events.get(id)?.etag)
+            throw Error("412 Precondition Failed");
+          calendarWrites.push("remove");
+          events.delete(id);
+        },
       },
     },
     MailApp: {
@@ -122,6 +167,7 @@ function harness(
       },
     },
     ScriptApp: {
+      getScriptId: () => "instance-test",
       getProjectTriggers: () => [...triggers],
       deleteTrigger: (t: (typeof triggers)[number]) => {
         triggers.splice(triggers.indexOf(t), 1);
@@ -178,6 +224,13 @@ function harness(
     sheets,
     properties,
     events,
+    calendarWrites,
+    failCalendarRead: () => {
+      failRead = true;
+    },
+    beforeCalendarWrite: (fn: () => void) => {
+      beforeWrite = fn;
+    },
     mails,
     created: () => created,
     triggers,
@@ -396,7 +449,7 @@ test("migration 002 appends routing without changing balances and never runs on 
   assert.equal(h.rows.length, rows);
   assert.equal(h.properties.get("SCHEMA_VERSION"), "1");
   const after = h.api.initialize(before.nonce);
-  assert.equal(h.properties.get("SCHEMA_VERSION"), "4");
+  assert.equal(h.properties.get("SCHEMA_VERSION"), "5");
   assert.equal(after.records[0].input.emailTo, "management");
   assert.equal(
     after.records[0].emailRecipients?.join(","),
@@ -423,7 +476,7 @@ test("cancellations stay in the CALM correction digest until explicitly confirme
   s = h.api.cancelRequest(s.nonce, "request-1234", 2);
   assert.equal(s.reminders.pendingCount, 1);
   s = h.api.sendReminderNow(s.nonce);
-  assert.match(h.mails[0].body, /CORRECT CANCELLED LEAVE/);
+  assert.match(h.mails[0].body, /CORRECT REMOVED LEAVE/);
   s = h.api.confirmCalm(s.nonce, "request-1234", 3);
   assert.equal(s.reminders.pendingCount, 0);
 });
@@ -493,7 +546,7 @@ test("migration 004 adds only the archive sheet and never writes during a read",
   assert.equal(h.sheets.has("History"), false);
   assert.throws(() => h.api.importHistory("invalid"), /Invalid confirmation/);
   s = h.api.importHistory(s.nonce);
-  assert.equal(h.properties.get("SCHEMA_VERSION"), "4");
+  assert.equal(h.properties.get("SCHEMA_VERSION"), "5");
   assert.equal(h.rows.length, before);
   assert.equal(s.history.years.length, 1);
 });
@@ -514,4 +567,241 @@ test("a changed source appends a history revision without replacing prior rows",
   assert.equal(h.historyRows.length, 4);
   assert.equal(h.api.getHistoryYear(2027).revision, archive.years[0].revision);
   assert.equal(s.records.length, 0);
+});
+
+test("Calendar events carry instance, request and date ownership tags", () => {
+  const h = harness();
+  const s = h.init();
+  h.api.createRequest(s.nonce, {
+    id: "request-tagged",
+    category: "vacation",
+    mode: "full",
+    first: "2026-11-16",
+    last: "2026-11-16",
+    emailTo: "none",
+  });
+  const e = [...h.events.values()][0];
+  assert.deepEqual(e.extendedProperties?.private, {
+    dayoffId: "request-tagged",
+    dayoffInstance: "instance-test",
+    dayoffDate: "2026-11-16",
+  });
+});
+test("Calendar changes and deletion reject untagged, foreign or mismatched events", () => {
+  for (const tags of [
+    { dayoffId: "request-tagged" },
+    {
+      dayoffId: "request-tagged",
+      dayoffInstance: "another-instance",
+      dayoffDate: "2026-11-16",
+    },
+    {
+      dayoffId: "another-request",
+      dayoffInstance: "instance-test",
+      dayoffDate: "2026-11-16",
+    },
+    {
+      dayoffId: "request-tagged",
+      dayoffInstance: "instance-test",
+      dayoffDate: "2026-11-17",
+    },
+  ] as Record<string, string>[]) {
+    const h = harness();
+    let s = h.init();
+    s = h.api.createRequest(s.nonce, {
+      id: "request-tagged",
+      category: "vacation",
+      mode: "full",
+      first: "2026-11-16",
+      last: "2026-11-16",
+      emailTo: "none",
+    });
+    const e = [...h.events.values()][0];
+    e.extendedProperties = { private: tags };
+    const before = JSON.stringify([...h.events]);
+    assert.throws(
+      () => h.api.confirmCalm(s.nonce, "request-tagged", 1),
+      /Calendar.*ownership|Calendar.*tag/i,
+    );
+    s = h.api.getDashboard();
+    assert.throws(
+      () =>
+        h.api.cancelRequest(s.nonce, "request-tagged", s.records[0].version),
+      /Calendar.*ownership|Calendar.*tag/i,
+    );
+    assert.equal(JSON.stringify([...h.events]), before);
+    assert.deepEqual(h.calendarWrites, ["insert"]);
+    assert.equal(h.mails.length, 0);
+  }
+});
+test("Calendar preflights every date before a batch and uses ETags against concurrent ownership changes", () => {
+  const h = harness();
+  let s = h.init();
+  s = h.api.createRequest(s.nonce, {
+    id: "request-tagged",
+    category: "vacation",
+    mode: "full",
+    first: "2026-11-16",
+    last: "2026-11-18",
+    emailTo: "none",
+  });
+  const all = [...h.events.values()];
+  all[2].extendedProperties!.private!.dayoffInstance = "other";
+  assert.throws(
+    () => h.api.cancelRequest(s.nonce, "request-tagged", 1),
+    /Calendar.*ownership|Calendar.*tag/i,
+  );
+  assert.equal(h.events.size, 3);
+  assert.deepEqual(h.calendarWrites, ["insert", "insert", "insert"]);
+  const race = harness();
+  s = race.init();
+  s = race.api.createRequest(s.nonce, {
+    id: "request-race",
+    category: "sick",
+    mode: "full",
+    first: "2026-11-16",
+    last: "2026-11-16",
+    emailTo: "none",
+  });
+  race.beforeCalendarWrite(() => {
+    const e = [...race.events.values()][0];
+    e.etag = "external-change";
+    e.extendedProperties!.private!.dayoffInstance = "other";
+  });
+  assert.throws(
+    () => race.api.confirmCalm(s.nonce, "request-race", 1),
+    /Calendar.*changed|Calendar.*update/i,
+  );
+  assert.equal([...race.events.values()][0].etag, "external-change");
+  assert.deepEqual(race.calendarWrites, ["insert"]);
+});
+test("a grouped request has one email, independent events and precise date removal and reminders", () => {
+  const h = harness();
+  let s = h.init();
+  s = h.api.createRequest(s.nonce, {
+    id: "request-grouped",
+    category: "vacation",
+    mode: "full",
+    first: "2026-11-16",
+    last: "2026-11-18",
+    ranges: [
+      { mode: "full", first: "2026-11-16", last: "2026-11-18" },
+      { mode: "full", first: "2026-11-20", last: "2026-11-20" },
+    ],
+  });
+  assert.equal(h.events.size, 4);
+  assert.equal(h.mails.length, 1);
+  assert.doesNotMatch(h.mails[0].body, /11\/19/);
+  s = h.api.confirmCalm(s.nonce, "request-grouped", 1);
+  s = h.api.removeRequestDate(
+    s.nonce,
+    "request-grouped",
+    s.records[0].version,
+    "2026-11-17",
+  );
+  assert.equal(h.events.size, 3);
+  assert.equal(h.mails.length, 2);
+  assert.equal(s.totals.planned.vacation, 2175);
+  h.api.sendReminderNow(s.nonce);
+  const digest = h.mails.at(-1)!.body;
+  assert.match(digest, /2026-11-17: 7.25 hours/);
+  assert.doesNotMatch(digest, /2026-11-18:|2026-11-20:/);
+  assert.match(h.api.exportReport(), /cancelled.*2026-11-17/);
+});
+
+test("Calendar read failures and creation collisions never authorize changes to foreign events", () => {
+  const h = harness();
+  let s = h.init();
+  h.failCalendarRead();
+  assert.throws(
+    () =>
+      h.api.createRequest(s.nonce, {
+        id: "request-readfail",
+        category: "sick",
+        mode: "full",
+        first: "2026-11-16",
+        last: "2026-11-16",
+      }),
+    /Calendar ownership/,
+  );
+  assert.equal(h.events.size, 0);
+  assert.equal(h.mails.length, 0);
+  assert.deepEqual(h.calendarWrites, []);
+  const race = harness();
+  s = race.init();
+  const id = createHash("sha256")
+    .update("request-collision:2026-11-16")
+    .digest("hex");
+  const foreign = {
+    id,
+    summary: "Unrelated event",
+    etag: "other-version",
+    extendedProperties: { private: { dayoffInstance: "other" } },
+  };
+  race.beforeCalendarWrite(() => race.events.set(id, structuredClone(foreign)));
+  assert.throws(
+    () =>
+      race.api.createRequest(s.nonce, {
+        id: "request-collision",
+        category: "vacation",
+        mode: "full",
+        first: "2026-11-16",
+        last: "2026-11-16",
+      }),
+    /Calendar event ownership/,
+  );
+  assert.deepEqual(race.events.get(id), foreign);
+  assert.deepEqual(race.calendarWrites, []);
+});
+test("Calendar deletion fails closed if ownership changes after its check", () => {
+  const h = harness();
+  let s = h.init();
+  s = h.api.createRequest(s.nonce, {
+    id: "request-delete-race",
+    category: "vacation",
+    mode: "full",
+    first: "2026-11-16",
+    last: "2026-11-16",
+    emailTo: "none",
+  });
+  h.beforeCalendarWrite(() => {
+    const e = [...h.events.values()][0];
+    e.etag = "changed";
+    e.extendedProperties!.private!.dayoffInstance = "other";
+  });
+  assert.throws(
+    () => h.api.cancelRequest(s.nonce, "request-delete-race", 1),
+    /Calendar event changed/,
+  );
+  assert.equal(h.events.size, 1);
+  assert.deepEqual(h.calendarWrites, ["insert"]);
+});
+test("migration 005 appends cancellation metadata without changing hours or touching Calendar on setup", () => {
+  const h = harness();
+  let s = h.init();
+  s = h.api.createRequest(s.nonce, {
+    id: "request-legacy",
+    category: "vacation",
+    mode: "full",
+    first: "2026-11-16",
+    last: "2026-11-16",
+    emailTo: "none",
+  });
+  const payload = JSON.parse(h.rows.at(-1)![2] as string);
+  delete payload.cancelledDates;
+  delete payload.calmCorrectionDates;
+  h.rows.at(-1)![2] = JSON.stringify(payload);
+  h.properties.set("SCHEMA_VERSION", "4");
+  const before = h.rows.length,
+    totals = JSON.stringify(s.totals),
+    writes = h.calendarWrites.length;
+  s = h.api.getDashboard();
+  assert.equal(h.rows.length, before);
+  assert.equal(h.properties.get("SCHEMA_VERSION"), "4");
+  s = h.api.saveReminders(s.nonce, 9, false);
+  assert.equal(h.properties.get("SCHEMA_VERSION"), "5");
+  assert.equal(h.rows.length, before + 1);
+  assert.deepEqual([...s.records[0].cancelledDates!], []);
+  assert.equal(JSON.stringify(s.totals), totals);
+  assert.equal(h.calendarWrites.length, writes);
 });

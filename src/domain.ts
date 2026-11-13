@@ -31,15 +31,18 @@ export interface Config {
   schedules: Schedule[];
   holidays: string[];
 }
-export interface Input {
-  emailTo?: EmailChoice;
-  id: string;
-  category: Category;
+export interface AbsenceRange {
   mode: Mode;
   first: string;
   last: string;
   start?: string;
   end?: string;
+}
+export interface Input extends AbsenceRange {
+  emailTo?: EmailChoice;
+  id: string;
+  category: Category;
+  ranges?: AbsenceRange[];
 }
 export interface Day {
   date: string;
@@ -67,6 +70,9 @@ export interface RecordEntry {
   created: string;
   updated: string;
   legacy?: boolean;
+  cancelledDates?: string[];
+  calmCorrectionDates?: string[];
+  lastRemovedDates?: string[];
 }
 export function invariant(ok: unknown, message: string): asserts ok {
   if (!ok) throw new Error(message);
@@ -188,7 +194,6 @@ export function scheduleOn(c: Config, date: string): Schedule {
   return s;
 }
 export function createDays(c: Config, input: Input): Day[] {
-  const fiscal = fiscalBounds(c);
   invariant(
     input && /^[a-zA-Z0-9-]{8,80}$/.test(input.id),
     "Invalid request ID.",
@@ -202,6 +207,22 @@ export function createDays(c: Config, input: Input): Day[] {
     ["vacation", "sick", "personal", "other"].includes(input.category),
     "Invalid leave category.",
   );
+  const ranges = input.ranges ?? [input];
+  invariant(
+    Array.isArray(ranges) && ranges.length > 0 && ranges.length <= 32,
+    "Invalid range rows; use between 1 and 32 ranges.",
+  );
+  const days = ranges.flatMap((range) => createRange(c, range));
+  days.sort((a, b) => a.date.localeCompare(b.date));
+  invariant(
+    new Set(days.map((d) => d.date)).size === days.length,
+    "Invalid duplicate date across ranges; use one row per date.",
+  );
+  return days;
+}
+function createRange(c: Config, input: AbsenceRange): Day[] {
+  const fiscal = fiscalBounds(c);
+  invariant(input && typeof input === "object", "Invalid absence range.");
   invariant(
     ["full", "half", "partial"].includes(input.mode),
     "Invalid absence mode.",
@@ -285,7 +306,9 @@ export function report(c: Config, records: RecordEntry[], today: string) {
     );
     const end = monthEnd > fiscal.end ? fiscal.end : monthEnd;
     const charges = active
-      .flatMap((r) => r.days.map((d) => ({ ...d, category: r.input.category })))
+      .flatMap((r) =>
+        activeDays(r).map((d) => ({ ...d, category: r.input.category })),
+      )
       .filter((d) => d.date >= first && d.date <= end);
     for (const d of charges)
       (d.date <= today ? used : planned)[d.category] += d.hours;
@@ -332,11 +355,37 @@ export function report(c: Config, records: RecordEntry[], today: string) {
     monthly,
   };
 }
+export function activeDays(r: RecordEntry): Day[] {
+  return r.status === "cancelled"
+    ? []
+    : r.days.filter((d) => !r.cancelledDates?.includes(d.date));
+}
+export function calmDays(r: RecordEntry): Day[] {
+  return r.calm === "correction"
+    ? r.days.filter((d) =>
+        (
+          r.calmCorrectionDates ??
+          (r.status === "cancelled" ? r.days.map((x) => x.date) : [])
+        ).includes(d.date),
+      )
+    : activeDays(r);
+}
+export function dateSpans(days: Day[]): string[][] {
+  const spans: string[][] = [];
+  for (const date of [...new Set(days.map((d) => d.date))].sort()) {
+    const previous = spans.at(-1);
+    if (previous && plusDays(previous.at(-1)!, 1) === date) previous.push(date);
+    else spans.push([date]);
+  }
+  return spans;
+}
 export function managementMessage(
   c: Config,
   r: RecordEntry,
 ): { subject: string; body: string } {
-  const dates = r.days.map((d) => d.date);
+  const days = r.status === "cancelled" ? r.days : activeDays(r),
+    spans = dateSpans(days);
+  invariant(days.length > 0, "No active dates in this request.");
   const pretty = (date: string) =>
     new Intl.DateTimeFormat("en-US", {
       weekday: "long",
@@ -344,26 +393,41 @@ export function managementMessage(
       day: "2-digit",
       timeZone: "UTC",
     }).format(new Date(date + "T12:00:00Z"));
-  const dateLabel =
-    pretty(dates[0]) + (dates.length > 1 ? "–" + pretty(dates.at(-1)!) : "");
   const mmdd = (d: string) => d.slice(5, 7) + "/" + d.slice(8, 10);
-  const subject =
-    "Day Off, " +
-    mmdd(dates[0]) +
-    (dates.length > 1 ? "–" + mmdd(dates.at(-1)!) : "");
+  const labels = (format: (d: string) => string) =>
+    spans.map(
+      (span) =>
+        format(span[0]) + (span.length > 1 ? "–" + format(span.at(-1)!) : ""),
+    );
+  const compact = labels(mmdd);
   return {
-    subject,
+    subject:
+      "Day Off, " +
+      compact.slice(0, 3).join(", ") +
+      (compact.length > 3 ? ` (+${compact.length - 3} more ranges)` : ""),
     body:
       "I need to take " +
-      dateLabel +
+      labels(pretty).join(", ") +
       " off as " +
       r.input.category +
       " leave (" +
-      hoursText(r.days.reduce((n, d) => n + d.hours, 0)) +
+      hoursText(days.reduce((sum, d) => sum + d.hours, 0)) +
       " hours). I put it on the Staff Calendar. " +
       (r.calm === "entered"
         ? "I entered it into CALM."
-        : "I’ll enter it into CALM."),
+        : "I’ll enter it into CALM.") +
+      "\n\n" +
+      days
+        .map(
+          (d) =>
+            pretty(d.date) +
+            " · " +
+            (d.allDay ? "All day" : d.start + "–" + d.end) +
+            " · " +
+            hoursText(d.hours) +
+            " hours",
+        )
+        .join("\n"),
   };
 }
 export function pendingCalm(r: RecordEntry): boolean {

@@ -7,14 +7,22 @@ import {
   title,
   plusDays,
   pendingCalm,
+  calmDays,
   invariant,
   csvCell,
   type Config,
   type RecordEntry,
   type Input,
 } from "./domain.js";
-import { submit, sync, cancel, markCalm, type Ports } from "./workflow.js";
-import { migration002 } from "./migrations.js";
+import {
+  submit,
+  sync,
+  cancel,
+  markCalm,
+  removeDate,
+  type Ports,
+} from "./workflow.js";
+import { migration002, migration005 } from "./migrations.js";
 import {
   validateHistory,
   validateHistoryYear,
@@ -29,7 +37,7 @@ declare const DAYOFF_SEED: {
   records: RecordEntry[];
   warnings?: string[];
 };
-const SCHEMA = 4;
+const SCHEMA = 5;
 function config(): Config {
   return validateConfig({
     ...DAYOFF_CONFIG,
@@ -64,7 +72,9 @@ function store() {
   invariant(id, "Initialize your private ledger first.");
   const book = SpreadsheetApp.openById(id);
   invariant(
-    ["1", "2", "3", "4"].includes(props().getProperty("SCHEMA_VERSION") || ""),
+    ["1", "2", "3", "4", "5"].includes(
+      props().getProperty("SCHEMA_VERSION") || "",
+    ),
     "Unsupported ledger schema. Apply a versioned migration.",
   );
   const sheet = book.getSheetByName("Journal");
@@ -167,7 +177,7 @@ function migrate(c: Config) {
   )
     return;
   invariant(
-    ["1", "2", "3"].includes(props().getProperty("SCHEMA_VERSION") || ""),
+    ["1", "2", "3", "4"].includes(props().getProperty("SCHEMA_VERSION") || ""),
     "Unsupported ledger schema.",
   );
   if (props().getProperty("SCHEMA_VERSION") === "1")
@@ -178,6 +188,10 @@ function migrate(c: Config) {
   // Migration 003 fixes the ledger's annual boundary without changing journal rows.
   props().setProperty("FISCAL_YEAR_START", c.fiscalYearStart ?? "07-01");
   historySheet(true);
+  for (const r of list()) {
+    const updated = migration005(r);
+    if (updated !== r) save(updated);
+  }
   props().setProperty("SCHEMA_VERSION", String(SCHEMA));
 }
 function locked<T>(fn: () => T): T {
@@ -239,48 +253,140 @@ function eventId(id: string, date: string): string {
     .join("");
 }
 function calendar(c: Config, r: RecordEntry): void {
-  const events = Calendar?.Events;
-  invariant(events, "Calendar advanced service is unavailable.");
-  for (const d of r.days) {
-    const id = eventId(r.id, d.date);
-    if (r.status === "cancelled") {
+  const events = Calendar?.Events,
+    instance = ScriptApp.getScriptId();
+  invariant(
+    events && instance,
+    "Calendar service or instance identity is unavailable.",
+  );
+  const missing = (e: unknown) =>
+    /404|410|Not Found|notFound|has been deleted/i.test(String(e));
+  function read(id: string): GoogleAppsScript.Calendar.Schema.Event | null {
+    try {
+      return events!.get(c.calendarId, id);
+    } catch (e) {
+      if (missing(e)) return null;
+      throw new Error(
+        "Calendar ownership check failed. No unverified event was changed. Retry after reviewing access.",
+      );
+    }
+  }
+  function check(event: GoogleAppsScript.Calendar.Schema.Event, date: string) {
+    const tags = event.extendedProperties?.private;
+    invariant(
+      tags?.dayoffInstance === instance &&
+        tags.dayoffId === r.id &&
+        tags.dayoffDate === date,
+      "Calendar event ownership tags do not match this installation, request and date. It was left untouched. Older events require a reviewed migration.",
+    );
+    invariant(
+      typeof event.etag === "string" && event.etag.length > 0,
+      "Calendar event version is unavailable. It was left untouched.",
+    );
+  }
+  // Verify the whole request before the first write. ETags close the gap between verification and mutation.
+  const operations = r.days.map((d) => {
+    const id = eventId(r.id, d.date),
+      current = read(id),
+      remove = r.status === "cancelled" || !!r.cancelledDates?.includes(d.date);
+    if (current?.status === "cancelled") {
+      invariant(
+        remove,
+        "Calendar event was deleted outside Dayoff. Review this date before retrying.",
+      );
+      return { d, id, current: null, remove };
+    }
+    if (current) check(current, d.date);
+    return { d, id, current, remove };
+  });
+  for (const { d, id, current, remove } of operations) {
+    if (remove) {
+      if (!current) continue;
       try {
-        events.remove(c.calendarId, id, { sendUpdates: "none" });
+        events.remove(
+          c.calendarId,
+          id,
+          { sendUpdates: "none" },
+          { "If-Match": current.etag! },
+        );
       } catch (e) {
-        if (!/404|410|Not Found|notFound|has been deleted/i.test(String(e)))
-          throw new Error("Calendar cancellation failed. Retry this request.");
+        if (!missing(e))
+          throw new Error(
+            "Calendar event changed or cancellation failed. Review and retry this request.",
+          );
       }
       continue;
     }
-    const description =
-      "Hours: " +
-      hoursText(d.hours) +
-      "\nCALM: " +
-      (r.calm === "entered" ? "Entered" : "Pending") +
-      "\nDayoff reference: " +
-      r.id;
     const event: GoogleAppsScript.Calendar.Schema.Event = {
       id,
       summary: title(c, d),
-      description,
+      description:
+        "Hours: " +
+        hoursText(d.hours) +
+        "\nCALM: " +
+        (r.calm === "entered" || r.calm === "correction"
+          ? "Entered"
+          : "Pending") +
+        "\nDayoff reference: " +
+        r.id,
       start: d.allDay
         ? { date: d.date }
         : { dateTime: d.date + "T" + d.start + ":00", timeZone: c.timeZone },
       end: d.allDay
         ? { date: plusDays(d.date, 1) }
         : { dateTime: d.date + "T" + d.end + ":00", timeZone: c.timeZone },
-      extendedProperties: { private: { dayoffId: r.id } },
+      extendedProperties: {
+        private: {
+          ...(current?.extendedProperties?.private ?? {}),
+          dayoffInstance: instance,
+          dayoffId: r.id,
+          dayoffDate: d.date,
+        },
+      },
       transparency: "opaque",
     };
-    try {
-      events.insert(event, c.calendarId, { sendUpdates: "none" });
-    } catch (e) {
-      if (/409|already exists|duplicate/i.test(String(e)))
-        events.patch(event, c.calendarId, id, { sendUpdates: "none" });
-      else throw new Error("Calendar update failed. Retry this request.");
+    function patch(existing: GoogleAppsScript.Calendar.Schema.Event) {
+      check(existing, d.date);
+      try {
+        events!.patch(
+          {
+            ...event,
+            extendedProperties: {
+              private: {
+                ...existing.extendedProperties?.private,
+                ...event.extendedProperties?.private,
+              },
+            },
+          },
+          c.calendarId,
+          id,
+          { sendUpdates: "none" },
+          { "If-Match": existing.etag! },
+        );
+      } catch {
+        throw new Error(
+          "Calendar event changed or update failed. Review and retry this request.",
+        );
+      }
+    }
+    if (current) patch(current);
+    else {
+      try {
+        events.insert(event, c.calendarId, { sendUpdates: "none" });
+      } catch (e) {
+        if (!/409|already exists|duplicate/i.test(String(e)))
+          throw new Error("Calendar update failed. Retry this request.");
+        const conflict = read(id);
+        invariant(
+          conflict && conflict.status !== "cancelled",
+          "Calendar event changed during creation. Review before retrying.",
+        );
+        patch(conflict);
+      }
     }
   }
 }
+
 function ports(c: Config): Ports {
   return {
     list,
@@ -406,6 +512,19 @@ function cancelRequest(token: string, id: string, version: number) {
   return safe(() =>
     guard(token, (c) => {
       cancel(c, ports(c), id, version);
+      return dashboard(c);
+    }),
+  );
+}
+function removeRequestDate(
+  token: string,
+  id: string,
+  version: number,
+  date: string,
+) {
+  return safe(() =>
+    guard(token, (c) => {
+      removeDate(c, ports(c), id, version, date);
       return dashboard(c);
     }),
   );
@@ -563,15 +682,16 @@ function sendDigest(c: Config) {
   );
   const url = ScriptApp.getService().getUrl();
   invariant(url, "No web deployment is available.");
-  const lines = pending.map(
-    (r) =>
-      (r.calm === "correction" ? "CORRECT CANCELLED LEAVE" : "ENTER LEAVE") +
+  const lines = pending.map((r) => {
+    const days = calmDays(r);
+    return (
+      (r.calm === "correction" ? "CORRECT REMOVED LEAVE" : "ENTER LEAVE") +
       " — " +
       r.input.category +
       " — " +
-      hoursText(r.days.reduce((n, d) => n + d.hours, 0)) +
+      hoursText(days.reduce((sum, d) => sum + d.hours, 0)) +
       " hours\n" +
-      r.days
+      days
         .map((d) => d.date + ": " + hoursText(d.hours) + " hours")
         .join("\n") +
       "\nReview and confirm: " +
@@ -579,8 +699,9 @@ function sendDigest(c: Config) {
       "?request=" +
       encodeURIComponent(r.id) +
       "&version=" +
-      r.version,
-  );
+      r.version
+    );
+  });
   props().setProperties({
     REMINDER_ATTEMPT_DATE: today,
     REMINDER_ATTEMPT_STATE: "sending",
@@ -641,7 +762,9 @@ function exportReport() {
       for (const d of r.days)
         rows.push([
           r.id,
-          r.status,
+          r.status === "cancelled" || r.cancelledDates?.includes(d.date)
+            ? "cancelled"
+            : "active",
           d.date,
           r.input.category,
           hoursText(d.hours),
@@ -672,6 +795,7 @@ export const handlers = {
   preview,
   createRequest,
   cancelRequest,
+  removeRequestDate,
   confirmCalm,
   retryRequest,
   resolveEmail,

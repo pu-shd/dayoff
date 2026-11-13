@@ -118,6 +118,34 @@
         font-weight: 500;
         margin: 12px 0;
       }
+      .date-row {
+        min-width: 0;
+        margin: 20px 0 14px;
+        padding: 14px 18px 20px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+      }
+      .date-row .grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+      .date-row legend {
+        padding: 0 7px;
+        font-size: 14px;
+        font-weight: 650;
+      }
+      .date-row .row-tools {
+        display: flex;
+        justify-content: flex-end;
+        margin-bottom: 12px;
+      }
+      .date-row .row-tools button {
+        padding: 6px 10px;
+        font-size: 12px;
+      }
+      #records td small {
+        display: block;
+        margin-top: 6px;
+      }
       .grid {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -410,7 +438,8 @@
           padding: 24px 14px;
         }
         .cards,
-        .grid {
+        .grid,
+        .date-row .grid {
           grid-template-columns: 1fr;
         }
         .panel {
@@ -486,11 +515,16 @@
             Your leave, calendar, and CALM checklist.
           </p>
         </div>
-        <span id="mode" class="badge">Loading</span>
+        <span id="mode" class="badge" role="status" aria-live="polite"
+          >Connecting…</span
+        >
       </header>
-      <div id="message" class="status" role="status" aria-live="polite">
-        Connecting to your private ledger…
-      </div>
+      <div
+        id="message"
+        class="status hide"
+        role="status"
+        aria-live="polite"
+      ></div>
       <div id="setup" class="panel hide">
         <h2>Start your private record</h2>
         <p>
@@ -518,31 +552,49 @@
                   <option value="other">Other (tracked, no allowance)</option>
                 </select></label
               >
-              <label
-                >Length<select name="mode" id="length">
-                  <option value="full">Full day(s)</option>
-                  <option value="half">Half day(s), fixed charge</option>
-                  <option value="partial">
-                    Partial day(s), calculated hours
-                  </option>
-                </select></label
-              >
-              <label
-                >First date<input type="date" name="first" required /></label
-              ><label
-                >Last date<input type="date" name="last" /><small
-                  >Defaults to the first date.</small
-                ></label
-              >
-              <label class="timed hide"
-                >Absent from<input
-                  type="time"
-                  name="start"
-                  value="08:45" /></label
-              ><label class="timed hide"
-                >Absent until<input type="time" name="end" value="11:00"
-              /></label>
             </div>
+            <div id="date-rows">
+              <fieldset class="date-row">
+                <legend>Date range 1</legend>
+                <div class="row-tools">
+                  <button type="button" class="remove-dates secondary hide">
+                    Remove range
+                  </button>
+                </div>
+                <div class="grid">
+                  <label
+                    >Length<select name="mode" id="length">
+                      <option value="full">Full day(s)</option>
+                      <option value="half">Half day(s), fixed charge</option>
+                      <option value="partial">
+                        Partial day(s), calculated hours
+                      </option>
+                    </select></label
+                  >
+                  <label
+                    >First date<input
+                      type="date"
+                      name="first"
+                      required /></label
+                  ><label
+                    >Last date<input type="date" name="last" /><small
+                      >Defaults to the first date.</small
+                    ></label
+                  >
+                  <label class="timed hide"
+                    >Absent from<input
+                      type="time"
+                      name="start"
+                      value="08:45" /></label
+                  ><label class="timed hide"
+                    >Absent until<input type="time" name="end" value="11:00"
+                  /></label>
+                </div>
+              </fieldset>
+            </div>
+            <button id="add-dates" type="button" class="secondary">
+              Add dates
+            </button>
             <p class="muted">
               <small
                 >Weekends and configured holidays are excluded. For half days,
@@ -772,14 +824,18 @@
     <script>
       'use strict';
       const focus = <?!= focus ?>;
-      let state, pendingInput, historyYear, historyKey, historyLoad = 0, working = false, lastDateAutomatic = true;
+      let state, pendingInput, historyYear, historyKey, historyLoad = 0, working = false, hasError = false;
       const $ = id => document.getElementById(id);
       const money = n => (n / 100).toFixed(2);
       const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
       const date = s => new Intl.DateTimeFormat('en-US', {weekday:'long',month:'long',day:'numeric',year:'numeric',timeZone:'UTC'}).format(new Date(s+'T12:00:00Z'));
       const outstanding = r => !r.legacy && ((r.status==='active' && r.calm==='pending') || r.calm==='correction');
       function rpc(name,...args) { return new Promise((resolve,reject) => google.script.run.withSuccessHandler(resolve).withFailureHandler(reject)[name](...args)); }
-      function message(value,error=false) { $('message').textContent=value; $('message').className='status'+(error?' error':''); }
+      function renderMode() {
+       $('mode').textContent=(state?(state.config.delivery==='google'?'Live':'Preview mode'):'Connecting')+' · '+(working?'Working…':hasError?'Needs attention':'Ready');
+       $('mode').classList.toggle('error',hasError);
+      }
+      function message(value,error=false) { hasError=error;$('message').textContent=value;$('message').className='status'+(error?' error':'')+(value?'':' hide');renderMode(); }
       function enabled() {
        document.querySelectorAll('button').forEach(b=>b.disabled=working);
        if (!state || working) return;
@@ -787,8 +843,9 @@
        $('install').disabled=!live; $('stop').disabled=!state.reminders.enabled;
        $('send-now').disabled=!live || !state.reminders.pendingCount || state.reminders.lastSentDate===state.today || state.reminders.attemptDate===state.today;
        $('send').disabled=!live || !pendingInput;
+       updateRows();
       }
-      function busy(value) { working=value; enabled(); }
+      function busy(value) { working=value;renderMode();enabled(); }
       async function action(name,...args) {
        busy(true);
        try { const next=await rpc(name,state.nonce,...args); render(next); message(next.notice || 'Saved.'); return true; }
@@ -797,10 +854,16 @@
       }
       function text(tag,value,cls) {const node=document.createElement(tag);node.textContent=value;if(cls)node.className=cls;return node;}
       function button(label,callback,cls='secondary') {const b=text('button',label,cls);b.type='button';b.addEventListener('click',callback);return b;}
-      function range(r) {return date(r.days[0].date)+(r.days.length>1?' – '+date(r.days.at(-1).date):'');}
+      function activeDays(r) {return r.status==='cancelled'?[]:r.days.filter(d=>!r.cancelledDates?.includes(d.date));}
+      function calmDays(r) {return r.calm==='correction'?r.days.filter(d=>(r.calmCorrectionDates??(r.status==='cancelled'?r.days.map(x=>x.date):[])).includes(d.date)):activeDays(r);}
+      function dateList(days) {
+       const spans=[];for(const d of days){const previous=spans.at(-1);if(previous && new Date(previous.at(-1).date+'T12:00:00Z').getTime()+86400000===new Date(d.date+'T12:00:00Z').getTime())previous.push(d);else spans.push([d]);}
+       return spans.map(span=>date(span[0].date)+(span.length>1?' – '+date(span.at(-1).date):'')).join(', ');
+      }
+      function range(r) {return dateList(activeDays(r).length?activeDays(r):r.days);}
       function confirmEntry(r) {
        const correction=r.calm==='correction';
-       if(confirm((correction?'Have you corrected the cancelled leave':'Have you entered this leave')+' in CALM?\n\n'+range(r)+'\n'+cap(r.input.category)+' · '+money(r.days.reduce((n,d)=>n+d.hours,0))+' hours'))
+       if(confirm((correction?'Have you corrected the cancelled leave':'Have you entered this leave')+' in CALM?\n\n'+dateList(calmDays(r))+'\n'+cap(r.input.category)+' · '+money(calmDays(r).reduce((n,d)=>n+d.hours,0))+' hours'))
         action('confirmCalm',r.id,r.version);
       }
       function renderPreview(r) {
@@ -871,7 +934,7 @@
       }
       function render(s) {
        state=s;
-       $('mode').textContent=s.config.delivery==='disabled'?'Preview mode':'Live';
+       renderMode();
        $('subtitle').textContent=s.config.displayName+' · FY'+s.config.fiscalYear+' · balances as of '+s.today;
        $('setup').classList.toggle('hide',s.initialized);$('content').classList.toggle('hide',!s.initialized);
        $('cards').replaceChildren();
@@ -879,12 +942,13 @@
         const card=text('div','','card');card.setAttribute('data-category',key);card.append(text('span',label+' available now'),text('strong',money(s.totals.available[key])+' h'),text('small',money(s.totals.used[key])+' used · '+money(s.totals.planned[key])+' planned · '+money(s.totals.projected[key])+' projected at FY end'));$('cards').append(card);
        }
        $('full').textContent=money(s.config.policy.fullDay);$('half').textContent=money(s.config.policy.halfDay);$('ledger').href=s.ledgerUrl;
-       $('record-note').textContent='Imported monthly totals are assigned to month-end, so balances within an imported month are approximate. Avoid re-entering leave already included in those totals.';
+       $('record-note').textContent='Imported monthly totals are assigned to month-end, so balances within an imported month are approximate. Avoid re-entering leave already included in those totals. Dates submitted together share one request email and CALM confirmation; individual dates can be removed below.';
        const queue=s.records.filter(outstanding);$('calm-count').textContent=queue.length+' outstanding';$('calm-queue').replaceChildren();$('calm-empty').classList.toggle('hide',queue.length!==0);
        for(const r of queue.sort((a,b)=>a.days[0].date.localeCompare(b.days[0].date))){
+        const days=calmDays(r);
         const item=text('article','','queue-item'+(r.calm==='correction'?' correction':''));item.id='calm-'+r.id;item.setAttribute('data-category',r.input.category);
-        const top=text('div','','queue-top');top.append(text('h3',cap(r.input.category)+' · '+money(r.days.reduce((n,d)=>n+d.hours,0))+' hours'),text('span',r.calm==='correction'?'Correction needed':'Entry needed','badge'));
-        item.append(top,text('p',range(r)),text('p',r.days.map(d=>d.date+' · '+money(d.hours)+' h').join(' / '),'muted'));
+        const top=text('div','','queue-top');top.append(text('h3',cap(r.input.category)+' · '+money(days.reduce((n,d)=>n+d.hours,0))+' hours'),text('span',r.calm==='correction'?'Correction needed':'Entry needed','badge'));
+        item.append(top,text('p',dateList(days)),text('p',days.map(d=>d.date+' · '+money(d.hours)+' h').join(' / '),'muted'));
         const controls=text('div','','actions');controls.append(button(r.calm==='correction'?'Confirm CALM corrected':'Confirm entered in CALM',()=>confirmEntry(r)));item.append(controls);$('calm-queue').append(item);
         if(focus.id===r.id)item.classList.add('focus');
        }
@@ -901,39 +965,62 @@
        $('install').textContent=s.reminders.enabled?'Update reminder schedule':'Enable weekday reminders';
        const tbody=$('records');tbody.replaceChildren();
        for(const r of [...s.records].sort((a,b)=>b.days[0].date.localeCompare(a.days[0].date))){
-        const row=document.createElement('tr'), d=r.days[0];row.setAttribute('data-category',r.input.category);
-        row.append(text('td',r.legacy?d.date.slice(0,7)+' (monthly)':d.date+(r.days.length>1?' – '+r.days.at(-1).date:'')),text('td',cap(r.input.category)+(r.status==='cancelled'?' · cancelled':'')),text('td',money(r.days.reduce((n,x)=>n+x.hours,0))));
-        row.append(text('td',r.legacy?'Historical; CALM unverified':'CALM: '+r.calm+' · Calendar: '+r.calendar+' · Email: '+r.email+(r.email==='skipped'?'':r.input.emailTo?' to '+r.input.emailTo:'')));
-        const controls=document.createElement('td');
-        if(!r.legacy){
-         if(outstanding(r))controls.append(button(r.calm==='correction'?'Confirm CALM corrected':'Confirm entered in CALM',()=>confirmEntry(r)));
-         if(r.calendar==='pending'||r.email==='pending')controls.append(button('Retry incomplete steps',()=>action('retryRequest',r.id)));
-         if(r.email==='unknown'||r.email==='sending')controls.append(button('Confirm email received',()=>{if(confirm('Confirm receipt or an administrator-verified delivery trace.'))action('resolveEmail',r.id,r.version,true);}));
-         if(r.status==='active')controls.append(button('Cancel request',()=>{if(confirm('Cancel this request and remove its Calendar events? A cancellation email follows its original email choice. CALM corrections stay on your checklist if needed.'))action('cancelRequest',r.id,r.version);},'danger'));
+        const remaining=activeDays(r);
+        for(const [index,d] of r.days.entries()){
+         const removed=r.status==='cancelled' || r.cancelledDates?.includes(d.date),row=document.createElement('tr');row.setAttribute('data-category',r.input.category);
+         const dateCell=text('td',r.legacy?d.date.slice(0,7)+' (monthly)':d.date);
+         if(!r.legacy && index===0 && r.days.length>1)dateCell.append(text('small','Submitted together: '+dateList(r.days)));
+         row.append(dateCell,text('td',cap(r.input.category)+(removed?' · removed':'')),text('td',money(d.hours)));
+         const calm=removed?(r.calm==='correction' && calmDays(r).some(x=>x.date===d.date)?'correction':'no outstanding action'):r.calm==='correction'?'entered':r.calm;
+         row.append(text('td',r.legacy?'Historical; CALM unverified':'CALM: '+calm+' · Calendar: '+r.calendar+' · Email: '+r.email+(r.email==='skipped'?'':r.input.emailTo?' to '+r.input.emailTo:'')));
+         const controls=document.createElement('td');
+         if(!r.legacy){
+          if(!removed)controls.append(button('Remove date',()=>{if(confirm('Remove '+date(d.date)+' ('+money(d.hours)+' hours) from this request? Other dates stay in place. Correct CALM if it was already entered.'))action('removeRequestDate',r.id,r.version,d.date);},'danger'));
+          if(index===0){
+           if(outstanding(r))controls.append(button(r.calm==='correction'?'Confirm CALM corrected':'Confirm request entered in CALM',()=>confirmEntry(r)));
+           if(r.calendar==='pending'||r.email==='pending')controls.append(button('Retry incomplete steps',()=>action('retryRequest',r.id)));
+           if(r.email==='unknown'||r.email==='sending')controls.append(button('Confirm email received',()=>{if(confirm('Confirm receipt or an administrator-verified delivery trace.'))action('resolveEmail',r.id,r.version,true);}));
+           if(remaining.length>1)controls.append(button('Cancel all remaining dates',()=>{if(confirm('Cancel all remaining dates in this request and remove their Calendar events? Any CALM corrections stay on your checklist.'))action('cancelRequest',r.id,r.version);},'danger'));
+          }
+         }
+         row.append(controls);tbody.append(row);
         }
-        row.append(controls);tbody.append(row);
        }
-       const first=document.querySelector('[name=first]'),last=document.querySelector('[name=last]');
-       first.min=last.min=s.fiscalPeriod.start;first.max=last.max=s.fiscalPeriod.end;
+       for(const input of document.querySelectorAll('[name=first],[name=last]')){input.min=s.fiscalPeriod.start;input.max=s.fiscalPeriod.end;}
        renderHistory(s.history);
        enabled();
       }
       function invalidate(){pendingInput=null;$('preview').classList.add('hide');}
-      $('length').addEventListener('change',()=>{document.querySelectorAll('.timed').forEach(e=>e.classList.toggle('hide',$('length').value==='full'));invalidate();});
-      function defaultLastDate() {
-       const first=document.querySelector('[name=first]'),last=document.querySelector('[name=last]');
-       if(!last.value || lastDateAutomatic){last.value=first.value;lastDateAutomatic=true;}
+      const dateRows=()=>[...$('date-rows').querySelectorAll('.date-row')];
+      function updateRows(){
+       const rows=dateRows();$('add-dates').disabled=working || rows.length>=32;
+       rows.forEach((row,index)=>{row.querySelector('legend').textContent='Date range '+(index+1);const remove=row.querySelector('.remove-dates');remove.classList.toggle('hide',rows.length===1);remove.disabled=working||rows.length===1;remove.setAttribute('aria-label','Remove date range '+(index+1));});
       }
-      const firstDate=document.querySelector('[name=first]'),lastDate=document.querySelector('[name=last]');
-      for(const event of ['input','change']){
-       firstDate.addEventListener(event,defaultLastDate);
-       lastDate.addEventListener(event,()=>{lastDateAutomatic=!lastDate.value;});
+      function defaultLastDate(row){const first=row.querySelector('[name=first]'),last=row.querySelector('[name=last]');if(!last.value || row.dataset.autoLast==='true'){last.value=first.value;row.dataset.autoLast='true';}}
+      function bindRow(row){
+       row.dataset.autoLast='true';
+       for(const event of ['input','change']){
+        row.querySelector('[name=first]').addEventListener(event,()=>{defaultLastDate(row);invalidate();});
+        row.querySelector('[name=last]').addEventListener(event,()=>{row.dataset.autoLast=String(!row.querySelector('[name=last]').value);invalidate();});
+       }
+       const mode=row.querySelector('[name=mode]');
+       mode.addEventListener('change',()=>{row.querySelectorAll('.timed').forEach(node=>node.classList.toggle('hide',mode.value==='full'));invalidate();});
+       row.querySelector('.remove-dates').addEventListener('click',()=>{if(dateRows().length>1){row.remove();updateRows();invalidate();}});
       }
+      bindRow(dateRows()[0]);
+      $('add-dates').addEventListener('click',()=>{
+       if(dateRows().length>=32)return;
+       const row=dateRows()[0].cloneNode(true);row.querySelectorAll('[id]').forEach(node=>node.removeAttribute('id'));
+       for(const field of row.querySelectorAll('input'))field.value=field.type==='time'?(field.name==='start'?'08:45':'11:00'):'';
+       row.querySelector('[name=mode]').value='full';row.querySelectorAll('.timed').forEach(node=>node.classList.add('hide'));
+       $('date-rows').append(row);bindRow(row);updateRows();invalidate();row.querySelector('[name=first]').focus?.();
+      });
+      function rowInput(row){if(!row.querySelector('[name=last]').value)defaultLastDate(row);return Object.fromEntries([...row.querySelectorAll('[name]')].map(field=>[field.name,field.value]));}
       $('request-form').addEventListener('input',invalidate);
       $('request-form').addEventListener('submit',async e=>{
-       e.preventDefault();busy(true);if(!lastDate.value)defaultLastDate();
-       const input=Object.fromEntries(new FormData(e.target));pendingInput={...input,id:crypto.randomUUID(),emailTo:$('email-choice').value};
-       try{renderPreview(await rpc('preview',pendingInput));message('Review the dates, hours, and email choice. Nothing has been saved or sent.');}
+       e.preventDefault();busy(true);
+       const ranges=dateRows().map(rowInput);pendingInput={...ranges[0],ranges,category:document.querySelector('[name=category]').value,id:crypto.randomUUID(),emailTo:$('email-choice').value};
+       try{renderPreview(await rpc('preview',pendingInput));message('');}
        catch(err){message(err.message,true);invalidate();}finally{busy(false);}
       });
       $('email-choice').addEventListener('change',async()=>{
@@ -960,7 +1047,7 @@
       function download(name,body){const a=document.createElement('a'),url=URL.createObjectURL(new Blob([body],{type:'text/csv;charset=utf-8'}));a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
       $('export').addEventListener('click',async()=>{try{download('dayoff-FY'+state.config.fiscalYear+'-details.csv',await rpc('exportReport'));}catch(e){message(e.message,true);}});
       $('export-summary').addEventListener('click',()=>{const t=state.totals,rows=['category,used_hours,planned_hours,available_now_hours,projected_FY_end_hours'];for(const c of ['vacation','sick','personal'])rows.push([c,money(t.used[c]),money(t.planned[c]),money(t.available[c]),money(t.projected[c])].join(','));download('dayoff-FY'+state.config.fiscalYear+'-balances.csv',rows.join('\r\n'));});
-      rpc('getDashboard').then(s=>{render(s);message(s.config.delivery==='disabled'?'Preview mode is enabled.':'Ready. Request email defaults to you.');}).catch(e=>message(e.message,true));
+      rpc('getDashboard').then(s=>{render(s);message('');}).catch(e=>message(e.message,true));
     </script>
   </body>
 </html>

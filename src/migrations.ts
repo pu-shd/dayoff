@@ -16,3 +16,21 @@ export function migration002(r: RecordEntry, c: Config): RecordEntry {
           : [...c.managementEmails]),
   };
 }
+
+// Migration 005 adds per-date cancellation metadata without recalculating charges.
+export function migration005(r: RecordEntry): RecordEntry {
+  if (
+    r.legacy ||
+    (Array.isArray(r.cancelledDates) && Array.isArray(r.calmCorrectionDates))
+  )
+    return r;
+  return {
+    ...r,
+    cancelledDates:
+      r.cancelledDates ??
+      (r.status === "cancelled" ? r.days.map((d) => d.date) : []),
+    calmCorrectionDates:
+      r.calmCorrectionDates ??
+      (r.calm === "correction" ? r.days.map((d) => d.date) : []),
+  };
+}

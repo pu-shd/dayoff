@@ -7,6 +7,7 @@ This is a small Google Apps Script web app. Each employee deploys an **owner-onl
 ## Features
 
 - Full days, fixed-charge half days, and partial days with lunch overlap deducted.
+- Multiple noncontiguous date ranges in one request, with individual date removal.
 - Effective-dated schedules, holidays, and configurable fiscal years (July–June by default).
 - Monthly capped vacation accrual; sick and personal allowances.
 - Separate used, planned, currently available, and projected balances.
@@ -88,7 +89,19 @@ While delivery is disabled, use **Send test email to me** under CALM reminders. 
 
 Verify the sender, management recipients, Calendar ID, schedules, holidays, and policy. Set `delivery: "google"` locally and run `./scripts/update.sh`. Preview shows a request summary, daily hours, Calendar title, and the exact email draft. Entering the first date fills the last date automatically; it follows the first date until you enter an explicit last date. Leaving the last date blank at preview uses the first date. Nothing is saved or sent until you choose Save.
 
+The header combines readiness and delivery mode into one badge. Routine preview instructions stay with the preview.
+
+Use **Add dates** for additional date ranges in a single submission, such as three days followed by a gap and one more day. Each row has its own length, dates, and optional absence times; the leave type and email choice apply to the whole request. Remove an unsaved range before preview if needed. Up to 32 ranges are supported, with each working date appearing once. Weekends and configured holidays are excluded per row. Duplicate dates are rejected before anything is saved.
+
+Saving sends one chosen request email and creates one Calendar event per working date. All dates share a CALM confirmation and reminder entry, with every date and its hours listed. **Remove date** restores only that date's personal allowance and removes only its owned Calendar event. **Cancel all remaining dates** cancels the rest. A removal sends one update through the original email choice. Dates removed after CALM confirmation remain on the checklist as specific corrections; remaining dates keep their entered status. Changed hours or added dates after saving require a separate request.
+
 Request email defaults to **Email me a copy to resend**. You can instead select **Email the configured management recipients** or **No request email**. Saving always records the leave and updates Calendar; CALM tracking works with all three email choices. Each request retains its recipient choice for retries and cancellation notices. A new request defaults to self again.
+
+## Calendar event ownership
+
+Every new event is tagged with the Apps Script project ID, request ID, and date in Calendar private extended properties. The project ID stays stable across CLI deployments. Before updating or deleting events, the adapter checks all dates in that request, then uses `If-Match` with the retrieved event version for each mutation. Missing/mismatched tags, read failures, and concurrent changes stop the operation; a duplicate event ID alone never authorizes an update. Existing unrelated event information is preserved. See [Google's extended-property guide](https://developers.google.com/workspace/calendar/api/guides/extended-properties) and [conditional updates](https://developers.google.com/apps-script/advanced/calendar).
+
+**Events created by older versions have only a request tag. They are left untouched by the new ownership guard.** Updating/cancelling those events requires a separately reviewed migration that establishes their origin and adds the instance/date tags. This release does not claim events automatically from a matching title, date, or ID. If the check stops a saved change, its Calendar work remains pending and no request/update email is sent until synchronization succeeds. Review the event before retrying; unrelated events must remain unmodified. Tags are metadata, not a secrecy or authorization boundary against other Calendar editors.
 
 ## CALM checklist and reminders
 
@@ -122,7 +135,7 @@ Add `DAYOFF_HISTORY=local/attendance-history.json` to your private `.env`, then 
 
 The anchor is the most recent source FY, independent of the active ledger's FY. A snapshot for the active FY remains the original workbook view; current balances above it continue to reflect live requests. Changed archive sources append a new revision in the private Sheet's `History` tab, retaining prior revisions. Removing a source file does not delete saved history. Archive imports use the legacy template's July–June dates; the active ledger can use another configured fiscal boundary. See [operations](docs/operations.md) for recovery and [GitOps](docs/gitops.md) for optional private archive secrets.
 
-Cancel and recreate a request to change dates, hours, or category. Manual Calendar edits are not imported. Full-day policy is independent of elapsed office hours: 8:45–5 minus 45 minutes is 7.5 hours, but the configured full day is 7.25. Two half days can total 7.26; choose Full day for a whole-day absence and confirm rounding rules with your organization.
+Remove individual dates or cancel all remaining dates from Your Record. Create a separate request to add dates or change hours/category. Manual Calendar edits are not imported. Full-day policy is independent of elapsed office hours: 8:45–5 minus 45 minutes is 7.5 hours, but the configured full day is 7.25. Two half days can total 7.26; choose Full day for a whole-day absence and confirm rounding rules with your organization.
 
 ## Development
 

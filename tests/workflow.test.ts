@@ -1,8 +1,22 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { type Config, type RecordEntry, type Input } from "../src/domain.js";
-import { submit, sync, cancel, markCalm, type Ports } from "../src/workflow.js";
+import {
+  activeDays,
+  calmDays,
+  report,
+  type Config,
+  type RecordEntry,
+  type Input,
+} from "../src/domain.js";
+import {
+  submit,
+  sync,
+  cancel,
+  markCalm,
+  removeDate,
+  type Ports,
+} from "../src/workflow.js";
 const cfg = {
   ...JSON.parse(readFileSync("config/example.json", "utf8")),
   delivery: "google",
@@ -149,4 +163,81 @@ test("invalid email choices cannot write or send", () => {
   );
   assert.deepEqual(calls, { calendar: 0, mail: 0 });
   assert.equal(p.list().length, 0);
+});
+
+test("grouped requests send once and individual removal preserves other dates and charges", () => {
+  const { p, calls } = mock();
+  let r = submit(cfg, p, {
+    ...input,
+    emailTo: "none",
+    ranges: [
+      { mode: "full", first: "2026-11-16", last: "2026-11-18" },
+      { mode: "full", first: "2026-11-20", last: "2026-11-20" },
+    ],
+  });
+  assert.equal(calls.calendar, 1);
+  assert.equal(calls.mail, 0);
+  assert.equal(report(cfg, [r], "2026-11-30").used.vacation, 2900);
+  r = removeDate(cfg, p, r.id, r.version, "2026-11-17");
+  assert.deepEqual(
+    activeDays(r).map((d) => d.date),
+    ["2026-11-16", "2026-11-18", "2026-11-20"],
+  );
+  assert.equal(report(cfg, [r], "2026-11-30").used.vacation, 2175);
+  assert.equal(r.status, "active");
+  assert.equal(r.calm, "pending");
+  assert.equal(r.days.length, 4);
+  assert.throws(() => removeDate(cfg, p, r.id, 1, "2026-11-18"), /changed/);
+  const before = calls.calendar;
+  removeDate(cfg, p, r.id, r.version, "2026-11-17");
+  assert.equal(calls.calendar, before);
+});
+test("removing entered dates keeps a precise CALM correction through further removals and cancellation", () => {
+  const { p } = mock();
+  let r = submit(cfg, p, { ...input, last: "2026-11-18" });
+  r = sync(cfg, p, markCalm(p, r.id, 1));
+  r = removeDate(cfg, p, r.id, r.version, "2026-11-16");
+  assert.equal(r.calm, "correction");
+  assert.deepEqual(
+    calmDays(r).map((d) => d.date),
+    ["2026-11-16"],
+  );
+  r = removeDate(cfg, p, r.id, r.version, "2026-11-17");
+  assert.deepEqual(
+    calmDays(r).map((d) => d.date),
+    ["2026-11-16", "2026-11-17"],
+  );
+  r = cancel(cfg, p, r.id, r.version);
+  assert.equal(r.status, "cancelled");
+  assert.equal(r.calm, "correction");
+  assert.equal(calmDays(r).length, 3);
+  r = markCalm(p, r.id, r.version);
+  assert.equal(r.calm, "entered");
+  assert.deepEqual(r.calmCorrectionDates, []);
+});
+test("removing a date sends one update via the stored route, and unconfirmed removals do not become CALM corrections", () => {
+  const { p, calls } = mock(),
+    mail: { subject: string; body: string; to: string[] }[] = [];
+  p.mail = (to, subject, body) => {
+    calls.mail++;
+    mail.push({ to, subject, body });
+  };
+  let r = submit(cfg, p, {
+    ...input,
+    emailTo: "management",
+    last: "2026-11-18",
+  });
+  r = removeDate(
+    { ...cfg, managementEmails: ["changed@example.edu"] },
+    p,
+    r.id,
+    1,
+    "2026-11-17",
+  );
+  assert.equal(calls.mail, 2);
+  assert.match(mail[1].subject, /Updated/);
+  assert.deepEqual(mail[1].to, cfg.managementEmails);
+  assert.match(mail[1].body, /2026-11-17/);
+  assert.equal(r.calm, "pending");
+  assert.deepEqual(r.calmCorrectionDates, []);
 });

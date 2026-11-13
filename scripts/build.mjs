@@ -79,6 +79,7 @@ const handlers = [
   "preview",
   "createRequest",
   "cancelRequest",
+  "removeRequestDate",
   "confirmCalm",
   "retryRequest",
   "resolveEmail",

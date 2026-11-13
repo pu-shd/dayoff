@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { runInNewContext } from "node:vm";
+import { removeDate } from "../src/workflow.js";
 import { historyFixture } from "./history-fixture.js";
 import { historyIndex } from "../src/history.js";
 import type { HistoryArchive } from "../src/history.js";
@@ -94,6 +95,7 @@ function harness(
   };
   function refresh() {
     state.reminders.pendingCount = state.records.filter(pendingCalm).length;
+    state.totals = report(state.config, state.records, state.today);
     return structuredClone(state);
   }
   function response(name: string, args: unknown[]) {
@@ -114,6 +116,26 @@ function harness(
         message: managementMessage(cfg, r),
         calendarPreview: r.days.map((d) => ({ ...d, title: title(cfg, d) })),
       };
+    }
+    if (name === "removeRequestDate") {
+      removeDate(
+        state.config,
+        {
+          list: () => structuredClone(state.records),
+          save: (r) => {
+            state.records = state.records.map((old) =>
+              old.id === r.id ? r : old,
+            );
+          },
+          now: () => "example",
+          calendar: () => {},
+          mail: () => {},
+        },
+        args[1] as string,
+        args[2] as number,
+        args[3] as string,
+      );
+      return refresh();
     }
     if (name === "createRequest") {
       state.records.push(record(args[1] as Input));
@@ -412,4 +434,86 @@ test("last date defaults to the first date and follows it until an explicit end 
   assert.equal(input.last, input.first);
   assert.equal(last.value, first.value);
   assert.equal(h.get("preview-hours").textContent, "7.25");
+});
+
+test("readiness is consolidated into Live and preview creates no routine header banner", async () => {
+  const h = harness();
+  await h.tick();
+  assert.equal(h.get("mode").textContent, "Live · Ready");
+  assert.equal(h.get("message").classList.contains("hide"), true);
+  await h.preview();
+  assert.equal(h.get("message").classList.contains("hide"), true);
+  assert.doesNotMatch(
+    h.get("message").textContent!,
+    /Review the dates|defaults to you/,
+  );
+});
+test("date rows can be added and removed with independent defaults and one grouped submission", async () => {
+  const h = harness();
+  await h.tick();
+  const first = h.document.querySelector("[name=first]") as HTMLInputElement;
+  first.value = "2026-11-16";
+  first.dispatchEvent(new h.window.Event("input", { bubbles: true }));
+  (h.document.querySelector("[name=last]") as HTMLInputElement).value =
+    "2026-11-18";
+  h.get("add-dates").click();
+  let rows = [...h.get("date-rows").querySelectorAll<HTMLElement>(".date-row")];
+  assert.equal(rows.length, 2);
+  const secondFirst = rows[1].querySelector("[name=first]") as HTMLInputElement;
+  secondFirst.value = "2026-11-20";
+  secondFirst.dispatchEvent(new h.window.Event("input", { bubbles: true }));
+  assert.equal(
+    (rows[1].querySelector("[name=last]") as HTMLInputElement).value,
+    "2026-11-20",
+  );
+  h.get("request-form").dispatchEvent(
+    new h.window.Event("submit", { bubbles: true, cancelable: true }),
+  );
+  await h.tick();
+  assert.equal(h.get("preview-hours").textContent, "29.00");
+  assert.equal(h.get("preview-days").children.length, 4);
+  assert.doesNotMatch(h.get("preview-body").textContent!, /11\/19/);
+  const input = h.calls.find((c) => c.name === "preview")!.args[0] as Input;
+  assert.equal(input.ranges?.length, 2);
+  h.get("send").click();
+  await h.tick();
+  assert.equal(h.calls.filter((c) => c.name === "createRequest").length, 1);
+  assert.equal(h.get("records").children.length, 4);
+  assert.equal(h.get("calm-count").textContent, "1 outstanding");
+  h.get("add-dates").click();
+  rows = [...h.get("date-rows").querySelectorAll<HTMLElement>(".date-row")];
+  (rows[2].querySelector(".remove-dates") as HTMLButtonElement).click();
+  assert.equal(h.get("date-rows").querySelectorAll(".date-row").length, 2);
+  (rows[0].querySelector(".remove-dates") as HTMLButtonElement).click();
+  assert.equal(h.get("date-rows").querySelectorAll(".date-row").length, 1);
+  assert.equal(h.get("preview").classList.contains("hide"), true);
+});
+test("individual date removal preserves remaining entries and shows only the CALM correction dates", async () => {
+  const r = record({
+    id: "request-grouped",
+    category: "vacation",
+    mode: "full",
+    first: "2026-11-16",
+    last: "2026-11-18",
+    emailTo: "none",
+  });
+  r.calm = "entered";
+  const h = harness([r]);
+  await h.tick();
+  const row = [...h.get("records").children].find((row) =>
+    row.textContent!.includes("2026-11-17"),
+  )!;
+  const remove = [...row.querySelectorAll<HTMLButtonElement>("button")].find(
+    (b) => b.textContent === "Remove date",
+  )!;
+  remove.click();
+  await h.tick();
+  const call = h.calls.find((c) => c.name === "removeRequestDate")!;
+  assert.deepEqual(call.args.slice(1), [r.id, 1, "2026-11-17"]);
+  assert.equal(h.get("records").children.length, 3);
+  assert.match(h.get("calm-queue").textContent!, /2026-11-17/);
+  assert.doesNotMatch(
+    h.get("calm-queue").textContent!,
+    /2026-11-16|2026-11-18/,
+  );
 });

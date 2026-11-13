@@ -90,3 +90,11 @@ Open the canonical app URL, refresh, and use **Import attendance history**. It i
 The `History` tab stores complete source-year snapshots in append-only rows. Do not manually edit it. Copy the private Sheet or retain the original workbooks and private archive for backup. Revised sources require rerunning the importer, redeploying, and choosing Import again; old revisions are preserved. Imports do not delete years missing from a subsequent folder. To remove history or replace active-year ledger entries, use an explicitly reviewed migration.
 
 After importing, removing `DAYOFF_HISTORY` from configuration can reduce future bundle size without deleting saved history. The last imported anchor remains stored privately when the bundled source is removed. History exports contain source monthly usage and balances, not current live balances. Use the existing current-year balance export for management reconciliation against CALM.
+
+## Grouped dates and Calendar ownership
+
+Use Add dates to create noncontiguous ranges in one request. Each range can be full, half, or partial, while category and recipient choice remain shared. The saved request retains every calculated date; removing one restores only its hours. Entered CALM dates require explicit correction confirmation after removal. Remaining dates preserve their entered status.
+
+Migration 005 appends per-date cancellation defaults on the next authenticated write or reminder. It changes no original dates or charges and never tags Calendar events. New Calendar events carry the Apps Script project ID, request ID and date; updates and deletes require matching tags and conditional event versions. An event with missing or mismatched ownership tags is left untouched. A failed Calendar read does not authorize event creation or deletion. Resolve the conflict before retrying pending steps.
+
+Older events with only `dayoffId` need a separate, reviewed ownership migration. Do not work around a conflict by creating a duplicate request, manually editing the Journal, or applying another instance's tags. Establish the event's original project and matching saved request first. This release deliberately provides no automatic claim-by-title/date/ID operation. A copied Apps Script project has a different identity and cannot adopt the old project's events. Keep the existing project for ordinary CLI updates.

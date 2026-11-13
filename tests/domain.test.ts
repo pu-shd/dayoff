@@ -194,3 +194,75 @@ test("custom fiscal periods credit twelve month ends and clip partial boundary m
   assert.equal(january.projected.vacation, 12 * 1450);
   assert.equal(january.monthly[0].month, "2027-01");
 });
+
+test("separate ranges produce sorted dated charges without charging the gap", () => {
+  const input = {
+    ...record().input,
+    ranges: [
+      { mode: "full" as const, first: "2026-11-20", last: "2026-11-20" },
+      { mode: "full" as const, first: "2026-11-16", last: "2026-11-18" },
+    ],
+  };
+  const days = createDays(cfg, input);
+  assert.deepEqual(
+    days.map((d) => d.date),
+    ["2026-11-16", "2026-11-17", "2026-11-18", "2026-11-20"],
+  );
+  const r = { ...record(), input, days };
+  const msg = managementMessage(cfg, r);
+  assert.match(msg.subject, /11\/16–11\/18, 11\/20/);
+  assert.doesNotMatch(msg.body, /11\/19/);
+  assert.match(msg.body, /29.00 hours/);
+});
+test("range rows validate their own mode and dates, reject duplicates and cap row count", () => {
+  const base = record().input;
+  assert.throws(() => createDays(cfg, { ...base, ranges: [] }), /range/i);
+  assert.throws(
+    () =>
+      createDays(cfg, {
+        ...base,
+        ranges: Array(33).fill({
+          mode: "full",
+          first: base.first,
+          last: base.last,
+        }),
+      }),
+    /range/i,
+  );
+  assert.throws(
+    () =>
+      createDays(cfg, {
+        ...base,
+        ranges: [
+          { mode: "full", first: base.first, last: base.last },
+          { mode: "full", first: base.first, last: base.last },
+        ],
+      }),
+    /duplicate|same date/i,
+  );
+  assert.throws(
+    () =>
+      createDays(cfg, {
+        ...base,
+        ranges: [{ mode: "full", first: "2027-07-01", last: "2027-07-01" }],
+      }),
+    /fiscal/,
+  );
+  const days = createDays(cfg, {
+    ...base,
+    ranges: [
+      { mode: "full", first: base.first, last: base.last },
+      {
+        mode: "partial",
+        first: "2026-11-20",
+        last: "2026-11-20",
+        start: "08:45",
+        end: "11:00",
+      },
+    ],
+  });
+  assert.deepEqual(
+    days.map((d) => d.hours),
+    [725, 225],
+  );
+});
