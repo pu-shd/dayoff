@@ -678,6 +678,9 @@
             <div id="history-warnings" class="status"></div>
             <div id="history-summary" class="cards"></div>
             <h3 style="margin-top: 24px">Monthly source figures</h3>
+            <p class="section-note muted">
+              Select a month to open the configured calendar in a new tab.
+            </p>
             <div class="table-wrap">
               <table>
                 <thead>
@@ -783,6 +786,18 @@
        $('preview').classList.remove('hide'); enabled();
       }
       function historyTableRow(values) {const row=document.createElement('tr');for(const value of values)row.append(text('td',value));return row;}
+      function calendarMonthLink(month) {
+       const next=new Date(month+'-01T00:00:00Z');next.setUTCMonth(next.getUTCMonth()+1);
+       const url=new URL('https://calendar.google.com/calendar/embed');
+       url.searchParams.set('src',state.config.calendarId);
+       url.searchParams.set('ctz',state.config.timeZone);
+       url.searchParams.set('mode','MONTH');
+       url.searchParams.set('dates',month.replace('-','')+'01/'+next.toISOString().slice(0,10).replaceAll('-',''));
+       const link=text('a',month);link.href=url.toString();link.target='_blank';link.rel='noopener noreferrer';
+       link.setAttribute('aria-label','Open configured calendar for '+month+' (new tab)');
+       link.title='Open this month in the configured calendar';
+       return link;
+      }
       async function loadHistory(year) {
        const request=++historyLoad; historyKey=null; historyYear=null; $('history-year').disabled=true;
        try {
@@ -792,7 +807,7 @@
         $('history-warnings').replaceChildren(...y.warnings.map(w=>text('p',w)));
         $('history-summary').replaceChildren();
         for(const c of ['vacation','sick','personal']){const card=text('div','','card');card.append(text('span',cap(c)+' used in source'),text('strong',money(y.totals[c])+' h'),text('small','Workbook closing: '+(y.balances[c]===null?'unavailable':money(y.balances[c])+' h')));$('history-summary').append(card);}
-        $('history-months').replaceChildren(...y.months.map(m=>historyTableRow([m.month,...['vacation','sick','personal'].map(c=>money(m[c])),...['vacation','sick','personal'].map(c=>m.balances[c]===null?'Unavailable':money(m.balances[c]))])));
+        $('history-months').replaceChildren(...y.months.map(m=>{const row=historyTableRow([m.month,...['vacation','sick','personal'].map(c=>money(m[c])),...['vacation','sick','personal'].map(c=>m.balances[c]===null?'Unavailable':money(m.balances[c]))]);row.firstElementChild.replaceChildren(calendarMonthLink(m.month));return row;}));
         $('history-daily').replaceChildren(...y.daily.map(d=>historyTableRow([d.date,d.cell,d.mark])));
         $('history-daily-count').textContent=y.daily.length+' daily source markings';
         $('history-legend').textContent='Source legend: '+y.legend.map(e=>e.mark).join(' · ');

@@ -40,6 +40,7 @@ function harness(
   records: RecordEntry[] = [],
   focus = { id: "", version: "" },
   archive?: HistoryArchive,
+  config: Config = cfg,
 ) {
   const { document, window } = parseHTML(html);
   // linkedom omits native select.value setter/default selection; emulate browser behavior.
@@ -73,7 +74,7 @@ function harness(
       years: [] as ReturnType<typeof historyIndex>,
     },
     nonce: "test-nonce",
-    config: cfg,
+    config,
     records,
     totals: report(cfg, records, "2026-11-13"),
     today: "2026-11-13",
@@ -296,4 +297,37 @@ test("private history imports explicitly, displays source figures and treats raw
     ),
     false,
   );
+});
+
+test("history months link to the configured calendar, timezone and exact month in a new tab", async () => {
+  const config = {
+    ...cfg,
+    calendarId: "staff+archive#team@group.calendar.google.com",
+    timeZone: "Pacific/Auckland",
+  };
+  const h = harness([], undefined, historyFixture(), config);
+  await h.tick();
+  h.get("import-history").click();
+  await h.tick();
+  const links = [...h.get("history-months").querySelectorAll("a")];
+  assert.equal(links.length, 12);
+  for (const [index, link] of links.entries()) {
+    const month = historyFixture().years[0].months[index].month;
+    const start = month.replace("-", "") + "01";
+    const next = new Date(month + "-01T00:00:00Z");
+    next.setUTCMonth(next.getUTCMonth() + 1);
+    const end = next.toISOString().slice(0, 10).replaceAll("-", "");
+    const url = new URL(link.getAttribute("href")!);
+    assert.equal(url.origin, "https://calendar.google.com");
+    assert.equal(url.pathname, "/calendar/embed");
+    assert.equal(url.searchParams.get("src"), config.calendarId);
+    assert.equal(url.searchParams.get("ctz"), config.timeZone);
+    assert.equal(url.searchParams.get("mode"), "MONTH");
+    assert.equal(url.searchParams.get("dates"), start + "/" + end);
+    assert.equal(link.textContent, month);
+    assert.equal(link.getAttribute("target"), "_blank");
+    assert.match(link.getAttribute("rel")!, /noopener/);
+    assert.match(link.getAttribute("aria-label")!, /configured calendar/);
+  }
+  assert.equal(h.calls.filter((c) => c.name === "createRequest").length, 0);
 });
