@@ -3,12 +3,16 @@
   <head>
     <meta charset="utf-8" />
     <base target="_top" />
+    <title>Dayoff</title>
     <style>
       :root {
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-        color: #182c2b;
-        background: #f4f6f3;
+        color: #203b33;
+        background: #f4f5f0;
         font-size: 16px;
+        --green: #214e40;
+        --line: #dce3d9;
+        --muted: #5a6e63;
       }
       * {
         box-sizing: border-box;
@@ -18,66 +22,76 @@
       }
       main {
         max-width: 1120px;
-        margin: 0 auto;
-        padding: 32px 20px;
+        margin: auto;
+        padding: 36px 22px;
       }
-      header {
+      header,
+      .heading,
+      .preview-top,
+      .queue-top {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        gap: 20px;
+        gap: 16px;
       }
       h1 {
-        font-size: 34px;
-        letter-spacing: -1px;
+        font-size: 38px;
+        letter-spacing: -1.5px;
         margin: 0;
       }
       h2 {
-        font-size: 21px;
-        margin: 0 0 18px;
+        font-size: 23px;
+        letter-spacing: -0.4px;
+        margin: 0 0 16px;
+      }
+      h3 {
+        font-size: 17px;
+        margin: 0 0 12px;
       }
       p {
         line-height: 1.6;
       }
       .muted,
       small {
-        color: #526763;
+        color: var(--muted);
       }
       .eyebrow {
-        font-size: 12px;
-        letter-spacing: 2px;
+        font-size: 11px;
+        letter-spacing: 1.8px;
         text-transform: uppercase;
-        color: #527269;
-        margin: 0 0 8px;
+        font-weight: 650;
+        color: #65765c;
+        margin: 0 0 9px;
       }
       .badge {
-        background: #e6ece4;
+        background: #e5ebdf;
         border-radius: 20px;
-        padding: 8px 14px;
-        font-size: 13px;
+        padding: 7px 13px;
+        font-size: 12px;
+        white-space: nowrap;
       }
       .panel {
         background: white;
-        border: 1px solid #dce3dc;
-        border-radius: 14px;
-        padding: 24px;
-        margin-top: 22px;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        padding: 26px;
+        margin-top: 24px;
       }
       .cards {
         display: grid;
         grid-template-columns: repeat(3, 1fr);
         gap: 14px;
-        margin-top: 24px;
+        margin-top: 26px;
       }
       .card {
-        background: #183f36;
+        background: var(--green);
         color: #fff;
         border-radius: 12px;
         padding: 22px;
       }
-      .card span {
-        display: block;
-        color: #c9ddd4;
+      .card span,
+      .card small {
+        color: #d0ded3;
       }
       .card strong {
         display: block;
@@ -85,13 +99,10 @@
         font-weight: 500;
         margin: 12px 0;
       }
-      .card small {
-        color: #c9ddd4;
-      }
       .grid {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 16px;
+        gap: 18px;
       }
       label {
         display: block;
@@ -102,37 +113,45 @@
       select {
         display: block;
         width: 100%;
-        margin-top: 7px;
-        padding: 11px;
-        border: 1px solid #aebeb6;
-        border-radius: 7px;
-        background: #fff;
+        margin-top: 8px;
+        padding: 11px 12px;
+        border: 1px solid #afbeb0;
+        border-radius: 8px;
+        background: white;
         font: inherit;
+        color: inherit;
       }
       button,
       .button {
         display: inline-block;
-        border: 1px solid #1d5746;
-        border-radius: 7px;
-        background: #1d5746;
+        border: 1px solid var(--green);
+        border-radius: 8px;
+        background: var(--green);
         color: white;
-        padding: 11px 15px;
+        padding: 11px 16px;
         font: inherit;
         cursor: pointer;
         text-decoration: none;
       }
       button.secondary {
         background: white;
-        color: #1d5746;
+        color: var(--green);
       }
       button.danger {
         background: white;
-        color: #933a32;
-        border-color: #d5b9b4;
+        color: #963e34;
+        border-color: #d5bbb4;
       }
       button:disabled {
         opacity: 0.5;
-        cursor: wait;
+        cursor: default;
+      }
+      button:focus-visible,
+      input:focus-visible,
+      select:focus-visible,
+      a:focus-visible {
+        outline: 3px solid #c5a353;
+        outline-offset: 3px;
       }
       .actions {
         display: flex;
@@ -142,15 +161,15 @@
       }
       .status {
         padding: 14px 18px;
-        border-radius: 8px;
-        background: #edf1d9;
+        border-radius: 9px;
+        background: #e9eedb;
         white-space: pre-wrap;
         line-height: 1.5;
         margin-top: 18px;
       }
       .error {
-        background: #fae9e4;
-        color: #802e25;
+        background: #fae8e1;
+        color: #802f25;
       }
       .table-wrap {
         overflow: auto;
@@ -164,61 +183,242 @@
       th,
       td {
         padding: 14px 10px;
-        border-bottom: 1px solid #e4e9e3;
+        border-bottom: 1px solid #e5e9e1;
         vertical-align: top;
       }
       th {
-        font-size: 12px;
-        color: #526763;
+        font-size: 11px;
         text-transform: uppercase;
-        letter-spacing: 0.5px;
+        letter-spacing: 0.6px;
+        color: var(--muted);
       }
       td button {
         font-size: 12px;
         padding: 7px 9px;
         margin: 0 6px 6px 0;
       }
-      pre {
-        white-space: pre-wrap;
-        font: inherit;
-        line-height: 1.6;
-      }
       a {
-        color: #1d5746;
+        color: var(--green);
       }
       .hide {
         display: none !important;
       }
       footer {
-        margin: 28px 0;
-        color: #526763;
+        margin: 26px 0;
+        color: var(--muted);
         font-size: 13px;
+      }
+      #preview {
+        margin-top: 28px;
+        border: 1px solid #b9c9b8;
+        border-radius: 14px;
+        overflow: hidden;
+        background: #f9faf6;
+      }
+      .preview-top {
+        padding: 24px;
+        background: #eaf0e3;
+        align-items: flex-start;
+      }
+      .preview-top h3 {
+        font-size: 25px;
+        letter-spacing: -0.6px;
+        margin: 3px 0 9px;
+      }
+      .hours-total {
+        text-align: right;
+        min-width: 105px;
+      }
+      .hours-total strong {
+        display: block;
+        font-size: 38px;
+        letter-spacing: -1px;
+        font-weight: 500;
+      }
+      .hours-total small {
+        display: block;
+        margin-top: 3px;
+      }
+      .preview-body {
+        padding: 24px;
+      }
+      .preview-days {
+        margin: 0 0 22px;
+      }
+      .day-row {
+        display: grid;
+        grid-template-columns: 1.2fr 1fr auto;
+        gap: 12px;
+        padding: 11px 0;
+        border-bottom: 1px solid var(--line);
+        font-size: 14px;
+      }
+      .summary-box {
+        padding: 18px;
+        border-radius: 10px;
+        border: 1px solid var(--line);
+        background: white;
+      }
+      .summary-box p {
+        margin: 0;
+        font-size: 14px;
+      }
+      .delivery-box {
+        margin-top: 22px;
+        border-top: 1px solid var(--line);
+        padding-top: 22px;
+      }
+      .delivery-box .section-note {
+        margin-top: 10px;
+      }
+      .delivery-box label {
+        max-width: 520px;
+      }
+      .draft {
+        margin-top: 18px;
+        background: white;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+      }
+      .draft-header {
+        border-bottom: 1px solid var(--line);
+        padding: 16px 18px;
+        display: grid;
+        grid-template-columns: 60px 1fr;
+        gap: 9px;
+        font-size: 14px;
+      }
+      .draft-header span:nth-child(odd) {
+        color: var(--muted);
+      }
+      pre {
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        font: inherit;
+        line-height: 1.7;
+        margin: 0;
+        padding: 20px;
+      }
+      .preview-footer {
+        padding: 18px 24px;
+        border-top: 1px solid var(--line);
+        background: white;
+      }
+      .preview-footer p {
+        font-size: 13px;
+        margin: 12px 0 0;
+      }
+      .quiet-details {
+        font-size: 12px;
+        color: var(--muted);
+        margin-top: 16px;
+      }
+      .quiet-details summary {
+        cursor: pointer;
+      }
+      .quiet-details p {
+        overflow-wrap: anywhere;
+      }
+      .queue {
+        display: grid;
+        gap: 12px;
+        margin-top: 18px;
+      }
+      .queue-item {
+        border: 1px solid var(--line);
+        border-left: 4px solid #a6b485;
+        border-radius: 10px;
+        padding: 18px;
+      }
+      .queue-item.correction {
+        border-left-color: #b67852;
+      }
+      .queue-item h3 {
+        margin-bottom: 5px;
+      }
+      .queue-item p {
+        margin: 6px 0;
+        font-size: 14px;
+      }
+      .queue-item .actions {
+        margin-top: 12px;
+      }
+      .empty {
+        border: 1px dashed #b9c9b8;
+        border-radius: 10px;
+        padding: 22px;
+        margin-top: 18px;
+        color: var(--muted);
+      }
+      .settings {
+        margin-top: 22px;
+        padding-top: 22px;
+        border-top: 1px solid var(--line);
+      }
+      .settings .grid {
+        align-items: end;
+      }
+      .settings p {
+        font-size: 14px;
+      }
+      .focus {
+        box-shadow: 0 0 0 3px #c4ab64;
+      }
+      .section-note {
+        margin-top: -6px;
+        font-size: 14px;
       }
       @media (max-width: 650px) {
         main {
           padding: 24px 14px;
         }
-        .cards {
-          grid-template-columns: 1fr;
-        }
+        .cards,
         .grid {
           grid-template-columns: 1fr;
         }
         .panel {
           padding: 18px;
         }
+        .preview-top,
+        .preview-body {
+          padding: 18px;
+        }
+        .preview-top h3 {
+          font-size: 22px;
+        }
+        .hours-total strong {
+          font-size: 30px;
+        }
+        .day-row {
+          grid-template-columns: 1fr auto;
+        }
+        .day-row .day-time {
+          grid-column: 1/-1;
+          grid-row: 2;
+        }
+        .preview-footer {
+          padding: 18px;
+        }
         header {
           align-items: flex-start;
         }
-        .card strong {
-          font-size: 30px;
+        .draft-header {
+          grid-template-columns: 45px 1fr;
+        }
+        .heading {
+          align-items: flex-start;
+        }
+        .queue-top {
+          align-items: flex-start;
         }
       }
       @media print {
         button,
         form,
-        #setup,
-        .actions {
+        .actions,
+        .settings,
+        .quiet-details,
+        #setup {
           display: none !important;
         }
         .panel {
@@ -228,17 +428,16 @@
           background: white;
         }
         .card {
-          color: #182c2b;
           background: white;
+          color: #203b33;
           border: 1px solid;
         }
         .card span,
         .card small {
-          color: #526763;
+          color: var(--muted);
         }
       }
     </style>
-    <title>Dayoff</title>
   </head>
   <body>
     <main>
@@ -258,9 +457,8 @@
       <div id="setup" class="panel hide">
         <h2>Start your private record</h2>
         <p>
-          This creates a Google Sheet owned by your account and imports the
-          configured monthly workbook totals. It sends no emails and creates no
-          calendar events.
+          Create a Google Sheet owned by your account and import your configured
+          workbook totals.
         </p>
         <button id="initialize">Create private ledger</button>
       </div>
@@ -268,7 +466,7 @@
         <div class="cards" id="cards"></div>
         <section class="panel">
           <h2>Request time off</h2>
-          <p class="muted">
+          <p class="section-note muted">
             Full day: <span id="full"></span> hours · Half day:
             <span id="half"></span> hours. Partial days deduct the configured
             lunch overlap.
@@ -315,12 +513,123 @@
             </p>
             <button type="submit">Preview request</button>
           </form>
-          <div id="preview" class="hide">
-            <pre id="preview-text"></pre>
-            <p id="recipient"></p>
-            <button id="send">
-              Record, add to calendar &amp; email management
-            </button>
+          <section id="preview" class="hide" aria-label="Request preview">
+            <div class="preview-top">
+              <div>
+                <p class="eyebrow">Review before saving</p>
+                <h3 id="preview-title"></h3>
+                <p id="preview-date" class="muted"></p>
+                <span class="badge">Not submitted</span>
+              </div>
+              <div class="hours-total">
+                <strong id="preview-hours"></strong><span>hours of leave</span
+                ><small id="preview-day-count"></small>
+              </div>
+            </div>
+            <div class="preview-body">
+              <div id="preview-days" class="preview-days"></div>
+              <div class="grid">
+                <div class="summary-box">
+                  <h3>Staff Calendar</h3>
+                  <p id="preview-calendar"></p>
+                </div>
+                <div class="summary-box">
+                  <h3>CALM checklist</h3>
+                  <p>
+                    This request will need entry in CALM. Email reminders can
+                    continue until you confirm it is entered.
+                  </p>
+                </div>
+              </div>
+              <div class="delivery-box">
+                <label for="email-choice">Request email</label
+                ><select id="email-choice">
+                  <option value="self" selected>
+                    Email me a copy to resend
+                  </option>
+                  <option value="management">
+                    Email the configured management recipients
+                  </option>
+                  <option value="none">No request email</option>
+                </select>
+                <p id="email-explanation" class="section-note muted"></p>
+                <div class="draft" id="email-draft">
+                  <div class="draft-header">
+                    <span>To</span><span id="preview-to"></span
+                    ><span>Subject</span><strong id="preview-subject"></strong>
+                  </div>
+                  <pre id="preview-body"></pre>
+                </div>
+              </div>
+              <details class="quiet-details">
+                <summary>Request reference</summary>
+                <p id="preview-reference"></p>
+              </details>
+            </div>
+            <div class="preview-footer">
+              <button id="send">Save request &amp; email me</button>
+              <p id="preview-save-note" class="muted">
+                Saving records these hours and creates the real Staff Calendar
+                entry.
+              </p>
+            </div>
+          </section>
+        </section>
+        <section class="panel" id="calm-section">
+          <div class="heading">
+            <div>
+              <p class="eyebrow">Finish the official record</p>
+              <h2>CALM checklist &amp; reminders</h2>
+            </div>
+            <span id="calm-count" class="badge">0 outstanding</span>
+          </div>
+          <p class="section-note muted">
+            Enter the dates, leave type, and hours in CALM, then confirm below.
+            Corrections remain here until you confirm they are complete.
+          </p>
+          <div id="focus-notice" class="status hide"></div>
+          <div id="calm-queue" class="queue"></div>
+          <div id="calm-empty" class="empty hide">
+            You’re caught up. There are no outstanding CALM entries or
+            corrections.
+          </div>
+          <div class="settings">
+            <div class="grid">
+              <div>
+                <h3>Weekday email reminders</h3>
+                <p id="reminder-status"></p>
+                <p id="reminder-last" class="muted"></p>
+              </div>
+              <label
+                >Send around<select
+                  id="reminder-hour"
+                  aria-label="Reminder hour"
+                ></select
+              ></label>
+            </div>
+            <p class="muted">
+              One digest goes to <strong id="reminder-recipient"></strong>,
+              Monday–Friday, until everything is confirmed. Google schedules
+              delivery within the selected hour. Request-email choices do not
+              affect CALM reminders.
+            </p>
+            <div class="actions">
+              <button id="install">Enable weekday reminders</button
+              ><button id="stop" class="secondary">Pause reminders</button
+              ><button id="send-now" class="secondary">
+                Send today’s reminder now
+              </button>
+            </div>
+            <details class="quiet-details">
+              <summary>Email delivery diagnostic</summary>
+              <p>
+                Send a one-time MailApp test to your own address. This does not
+                change leave records.
+              </p>
+              <button id="test-mail" class="secondary">
+                Send test email to me
+              </button>
+            </details>
           </div>
         </section>
         <section class="panel">
@@ -341,114 +650,154 @@
             </table>
           </div>
           <div class="actions">
-            <button class="secondary" id="export">Export details CSV</button
-            ><button class="secondary" id="export-summary">
+            <button id="export" class="secondary">Export details CSV</button
+            ><button id="export-summary" class="secondary">
               Export balances CSV</button
             ><a id="ledger" class="button" target="_blank" rel="noopener"
               >Open private ledger</a
             >
           </div>
         </section>
-        <section class="panel">
-          <h2>CALM reminders</h2>
-          <p>
-            One weekday email lists outstanding entries and corrections. Opening
-            a link never marks a request entered. Review the record here and
-            confirm after updating CALM.
-          </p>
-          <p id="reminder-status" class="muted"></p>
-          <p class="muted">
-            Before enabling reminders, send a single MailApp test to your own
-            email address. This also works in preview mode and creates no leave
-            record.
-          </p>
-          <button id="test-mail" class="secondary">
-            Send test email to me
-          </button>
-          <div class="actions">
-            <button id="install" class="secondary">
-              Enable daily reminders</button
-            ><button id="stop" class="secondary">Stop reminders</button>
-          </div>
-        </section>
       </div>
       <footer>
         CALM remains the official record. These are your personal calculations.
-        Imported monthly summaries do not imply CALM verification.
+        Imported monthly totals do not imply CALM verification.
       </footer>
     </main>
     <script>
       'use strict';
       const focus = <?!= focus ?>;
-      let state, pendingInput;
+      let state, pendingInput, working = false;
       const $ = id => document.getElementById(id);
       const money = n => (n / 100).toFixed(2);
-      function rpc(name, ...args) { return new Promise((resolve,reject) => google.script.run.withSuccessHandler(resolve).withFailureHandler(reject)[name](...args)); }
-      function message(text,error=false) { $('message').textContent=text; $('message').className='status'+(error?' error':''); }
-      function busy(value) { document.querySelectorAll('button').forEach(b=>b.disabled=value); }
+      const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+      const date = s => new Intl.DateTimeFormat('en-US', {weekday:'long',month:'long',day:'numeric',year:'numeric',timeZone:'UTC'}).format(new Date(s+'T12:00:00Z'));
+      const outstanding = r => !r.legacy && ((r.status==='active' && r.calm==='pending') || r.calm==='correction');
+      function rpc(name,...args) { return new Promise((resolve,reject) => google.script.run.withSuccessHandler(resolve).withFailureHandler(reject)[name](...args)); }
+      function message(value,error=false) { $('message').textContent=value; $('message').className='status'+(error?' error':''); }
+      function enabled() {
+       document.querySelectorAll('button').forEach(b=>b.disabled=working);
+       if (!state || working) return;
+       const live = state.config.delivery==='google';
+       $('install').disabled=!live; $('stop').disabled=!state.reminders.enabled;
+       $('send-now').disabled=!live || !state.reminders.pendingCount || state.reminders.lastSentDate===state.today || state.reminders.attemptDate===state.today;
+       $('send').disabled=!live || !pendingInput;
+      }
+      function busy(value) { working=value; enabled(); }
       async function action(name,...args) {
        busy(true);
-       try { render(await rpc(name,state.nonce,...args));message('Saved.'); }
-       catch(e) { message(e.message||'Unable to complete the action.',true);try{const s=await rpc('getDashboard');render(s);}catch{ /* keep the original error visible */ } }
-       finally { busy(false); }
+       try { const next=await rpc(name,state.nonce,...args); render(next); message(next.notice || 'Saved.'); return true; }
+       catch(e) { message(e.message || 'Unable to complete the action.',true); try {render(await rpc('getDashboard'));} catch { /* Keep the original error visible. */ } return false; }
+       finally {busy(false);}
       }
-      function text(tag,value){const node=document.createElement(tag);node.textContent=value;return node;}
-      function button(label,callback,cls='secondary'){const b=text('button',label);b.className=cls;b.type='button';b.addEventListener('click',callback);return b;}
+      function text(tag,value,cls) {const node=document.createElement(tag);node.textContent=value;if(cls)node.className=cls;return node;}
+      function button(label,callback,cls='secondary') {const b=text('button',label,cls);b.type='button';b.addEventListener('click',callback);return b;}
+      function range(r) {return date(r.days[0].date)+(r.days.length>1?' – '+date(r.days.at(-1).date):'');}
+      function confirmEntry(r) {
+       const correction=r.calm==='correction';
+       if(confirm((correction?'Have you corrected the cancelled leave':'Have you entered this leave')+' in CALM?\n\n'+range(r)+'\n'+cap(r.input.category)+' · '+money(r.days.reduce((n,d)=>n+d.hours,0))+' hours'))
+        action('confirmCalm',r.id,r.version);
+      }
+      function renderPreview(r) {
+       $('preview-title').textContent=cap(r.input.category)+' leave';
+       $('preview-date').textContent=range(r);
+       $('preview-hours').textContent=money(r.days.reduce((n,d)=>n+d.hours,0));
+       $('preview-day-count').textContent=r.days.length+' working '+(r.days.length===1?'day':'days');
+       $('preview-days').replaceChildren();
+       for(const d of r.days){const row=text('div','','day-row');row.append(text('strong',date(d.date)),text('span',d.allDay?'All day':d.start+'–'+d.end,'day-time'),text('span',money(d.hours)+' h'));$('preview-days').append(row);}
+       $('preview-calendar').textContent=[...new Set(r.calendarPreview.map(d=>d.title))].join(' · ');
+       const choice=pendingInput.emailTo;
+       const to=choice==='management'?state.config.managementEmails:choice==='self'?[state.config.ownerEmail]:[];
+       $('preview-to').textContent=to.join(', ');
+       $('preview-subject').textContent=r.message.subject;
+       $('preview-body').textContent=r.message.body;
+       $('preview-reference').textContent=r.id;
+       $('email-draft').classList.toggle('hide',choice==='none');
+       $('email-explanation').textContent=choice==='self'?'A copy goes only to you. Resend or forward it to management when ready.':choice==='management'?'This request goes directly to your configured management recipients.':'No request email will be sent. The leave record, Calendar entry, and CALM checklist will still be created.';
+       $('send').textContent=choice==='self'?'Save request & email me':choice==='management'?'Save request & email management':'Save request without email';
+       $('send').classList.toggle('hide',state.config.delivery==='disabled');
+       $('preview-save-note').textContent=state.config.delivery==='disabled'?'Preview mode is enabled. This request cannot be saved or sent yet.':'Saving records these hours and creates the real Staff Calendar entry.';
+       $('preview').classList.remove('hide'); enabled();
+      }
       function render(s) {
-       state=s;$('mode').textContent=s.config.delivery==='disabled'?'Preview mode':'Live';
+       state=s;
+       $('mode').textContent=s.config.delivery==='disabled'?'Preview mode':'Live';
        $('subtitle').textContent=s.config.displayName+' · FY'+s.config.fiscalYear+' · balances as of '+s.today;
        $('setup').classList.toggle('hide',s.initialized);$('content').classList.toggle('hide',!s.initialized);
        $('cards').replaceChildren();
        for(const [key,label] of [['vacation','Vacation'],['sick','Sick'],['personal','Personal']]){
-       const card=text('div','');card.className='card';card.append(text('span',label+' available now'),text('strong',money(s.totals.available[key])+' h'),text('small',money(s.totals.used[key])+' used · '+money(s.totals.planned[key])+' planned · '+money(s.totals.projected[key])+' projected at FY end'));$('cards').append(card);
+        const card=text('div','','card');card.append(text('span',label+' available now'),text('strong',money(s.totals.available[key])+' h'),text('small',money(s.totals.used[key])+' used · '+money(s.totals.planned[key])+' planned · '+money(s.totals.projected[key])+' projected at FY end'));$('cards').append(card);
        }
-       $('full').textContent=money(s.config.policy.fullDay);$('half').textContent=money(s.config.policy.halfDay);
-       $('ledger').href=s.ledgerUrl;
-       $('recipient').textContent='Management: '+s.config.managementEmails.join(', ');
-       $('send').classList.toggle('hide',s.config.delivery==='disabled');
-       $('record-note').textContent='Imported entries are monthly totals assigned to month-end, so balances within an imported month are approximate. Avoid re-entering absences already included in those totals.';
-       $('reminder-status').textContent=s.remindersInstalled?'Reminders enabled; delivery around '+s.config.reminderHour+':00 '+s.config.timeZone+'.':'Reminders are off.';
-       $('install').classList.toggle('hide',s.config.delivery==='disabled'||s.remindersInstalled);
-       $('stop').classList.toggle('hide',!s.remindersInstalled);
+       $('full').textContent=money(s.config.policy.fullDay);$('half').textContent=money(s.config.policy.halfDay);$('ledger').href=s.ledgerUrl;
+       $('record-note').textContent='Imported monthly totals are assigned to month-end, so balances within an imported month are approximate. Avoid re-entering leave already included in those totals.';
+       const queue=s.records.filter(outstanding);$('calm-count').textContent=queue.length+' outstanding';$('calm-queue').replaceChildren();$('calm-empty').classList.toggle('hide',queue.length!==0);
+       for(const r of queue.sort((a,b)=>a.days[0].date.localeCompare(b.days[0].date))){
+        const item=text('article','','queue-item'+(r.calm==='correction'?' correction':''));item.id='calm-'+r.id;
+        const top=text('div','','queue-top');top.append(text('h3',cap(r.input.category)+' · '+money(r.days.reduce((n,d)=>n+d.hours,0))+' hours'),text('span',r.calm==='correction'?'Correction needed':'Entry needed','badge'));
+        item.append(top,text('p',range(r)),text('p',r.days.map(d=>d.date+' · '+money(d.hours)+' h').join(' / '),'muted'));
+        const controls=text('div','','actions');controls.append(button(r.calm==='correction'?'Confirm CALM corrected':'Confirm entered in CALM',()=>confirmEntry(r)));item.append(controls);$('calm-queue').append(item);
+        if(focus.id===r.id)item.classList.add('focus');
+       }
+       $('focus-notice').classList.add('hide');
+       if(focus.id){
+        const r=s.records.find(r=>r.id===focus.id);$('focus-notice').classList.remove('hide');
+        $('focus-notice').textContent=!r?'This reminder refers to a request that is not in this ledger.':!outstanding(r)?'This request has no outstanding CALM action.':String(r.version)!==String(focus.version)?'This reminder refers to an earlier revision. Review the latest dates and hours below before confirming.':'Review the highlighted request, update CALM, then confirm below.';
+       }
+       $('reminder-hour').replaceChildren();
+       for(let h=0;h<24;h++){const option=text('option',String(h).padStart(2,'0')+':00–'+String(h).padStart(2,'0')+':59');option.value=String(h);option.selected=h===s.reminders.hour;$('reminder-hour').append(option);}
+       $('reminder-status').textContent=s.reminders.enabled?'Enabled · Monday–Friday · around '+String(s.reminders.hour).padStart(2,'0')+':00 '+s.reminders.timeZone:'Paused. Your outstanding entries remain in the checklist.';
+       $('reminder-recipient').textContent=s.reminders.recipient;
+       $('reminder-last').textContent=s.reminders.attemptState==='unknown'||s.reminders.attemptState==='sending'?'The latest send outcome is uncertain. Check your inbox before retrying.':s.reminders.lastSentDate?'Last reminder sent: '+s.reminders.lastSentDate+'.':'No reminder has been sent yet.';
+       $('install').textContent=s.reminders.enabled?'Update reminder schedule':'Enable weekday reminders';
        const tbody=$('records');tbody.replaceChildren();
        for(const r of [...s.records].sort((a,b)=>b.days[0].date.localeCompare(a.days[0].date))){
-       const row=document.createElement('tr'), day=r.days[0];
-       row.append(text('td',r.legacy?day.date.slice(0,7)+' (monthly)':day.date+(r.days.length>1?' – '+r.days.at(-1).date:'')),text('td',r.input.category+(r.status==='cancelled'?' · cancelled':'')),text('td',money(r.days.reduce((n,d)=>n+d.hours,0))));
-       row.append(text('td',r.legacy?'Historical; CALM unverified':'CALM: '+r.calm+' · Calendar: '+r.calendar+' · Email: '+r.email));
-       const actions=document.createElement('td');
-       if(!r.legacy){
-       if(r.calm==='correction'||r.status==='active'&&r.calm==='pending')actions.append(button(r.calm==='correction'?'Confirm CALM corrected':'Confirm entered in CALM',()=>{if(confirm('Have you '+(r.calm==='correction'?'corrected':'entered')+' these dates and hours in CALM?'))action('confirmCalm',r.id,r.version);}));
-       if(r.calendar==='pending'||r.email==='pending')actions.append(button('Retry incomplete steps',()=>action('retryRequest',r.id)));
-       if(r.email==='unknown'||r.email==='sending')actions.append(button('Confirm email received',()=>{if(confirm('Confirm that the recipient received the management email, or that an administrator verified delivery.'))action('resolveEmail',r.id,r.version,true);}));
-       if(r.status==='active')actions.append(button('Cancel request',()=>{if(confirm('Cancel this request, remove its calendar events and email management? CALM correction will remain on your checklist if needed.'))action('cancelRequest',r.id,r.version);},'danger'));
+        const row=document.createElement('tr'), d=r.days[0];
+        row.append(text('td',r.legacy?d.date.slice(0,7)+' (monthly)':d.date+(r.days.length>1?' – '+r.days.at(-1).date:'')),text('td',cap(r.input.category)+(r.status==='cancelled'?' · cancelled':'')),text('td',money(r.days.reduce((n,x)=>n+x.hours,0))));
+        row.append(text('td',r.legacy?'Historical; CALM unverified':'CALM: '+r.calm+' · Calendar: '+r.calendar+' · Email: '+r.email+(r.email==='skipped'?'':r.input.emailTo?' to '+r.input.emailTo:'')));
+        const controls=document.createElement('td');
+        if(!r.legacy){
+         if(outstanding(r))controls.append(button(r.calm==='correction'?'Confirm CALM corrected':'Confirm entered in CALM',()=>confirmEntry(r)));
+         if(r.calendar==='pending'||r.email==='pending')controls.append(button('Retry incomplete steps',()=>action('retryRequest',r.id)));
+         if(r.email==='unknown'||r.email==='sending')controls.append(button('Confirm email received',()=>{if(confirm('Confirm receipt or an administrator-verified delivery trace.'))action('resolveEmail',r.id,r.version,true);}));
+         if(r.status==='active')controls.append(button('Cancel request',()=>{if(confirm('Cancel this request and remove its Calendar events? A cancellation email follows its original email choice. CALM corrections stay on your checklist if needed.'))action('cancelRequest',r.id,r.version);},'danger'));
+        }
+        row.append(controls);tbody.append(row);
        }
-       row.append(actions);tbody.append(row);
-       if(focus.id===r.id){row.style.background='#edf1d9';if(String(r.version)!==focus.version)message('This reminder refers to an earlier revision. Review the latest record before confirming.');}
-       }
+       const first=document.querySelector('[name=first]'),last=document.querySelector('[name=last]');
+       first.min=last.min=(s.config.fiscalYear-1)+'-07-01';first.max=last.max=s.config.fiscalYear+'-06-30';
+       enabled();
       }
-      $('length').addEventListener('change',()=>{document.querySelectorAll('.timed').forEach(e=>e.classList.toggle('hide',$('length').value==='full'));pendingInput=null;$('preview').classList.add('hide');});
-      $('request-form').addEventListener('input',()=>{pendingInput=null;$('preview').classList.add('hide');});
+      function invalidate(){pendingInput=null;$('preview').classList.add('hide');}
+      $('length').addEventListener('change',()=>{document.querySelectorAll('.timed').forEach(e=>e.classList.toggle('hide',$('length').value==='full'));invalidate();});
+      $('request-form').addEventListener('input',invalidate);
       $('request-form').addEventListener('submit',async e=>{
-       e.preventDefault();busy(true);pendingInput={...Object.fromEntries(new FormData(e.target)),id:crypto.randomUUID()};
-       try {
-       const r=await rpc('preview',pendingInput);$('preview-text').textContent=r.days.map(d=>d.date+' · '+(d.allDay?'All day':d.start+'–'+d.end)+' · '+money(d.hours)+' hours').join('\n')+'\n\n'+r.message.subject+'\n'+r.message.body;
-       $('preview').classList.remove('hide');message(state.config.delivery==='disabled'?'Preview only. No record, calendar event or email has been created.':'Review the dates, hours and email before recording.');
-       }catch(err){message(err.message,true);pendingInput=null;}finally{busy(false);}
+       e.preventDefault();busy(true);
+       const input=Object.fromEntries(new FormData(e.target));pendingInput={...input,id:crypto.randomUUID(),emailTo:$('email-choice').value};
+       try{renderPreview(await rpc('preview',pendingInput));message('Review the dates, hours, and email choice. Nothing has been saved or sent.');}
+       catch(err){message(err.message,true);invalidate();}finally{busy(false);}
       });
-      $('send').addEventListener('click',async()=>{if(pendingInput){await action('createRequest',pendingInput);pendingInput=null;$('preview').classList.add('hide');}});
+      $('email-choice').addEventListener('change',async()=>{
+       if(!pendingInput)return;busy(true);pendingInput.emailTo=$('email-choice').value;
+       try{renderPreview(await rpc('preview',pendingInput));}catch(e){message(e.message,true);invalidate();}finally{busy(false);}
+      });
+      $('send').addEventListener('click',async()=>{
+       if(!pendingInput)return;const id=pendingInput.id;
+       const ok=await action('createRequest',pendingInput);
+       if(ok || state.records.some(r=>r.id===id)){invalidate();$('email-choice').value='self';}
+       if(ok)message('Request saved and Calendar updated. '+(state.records.find(r=>r.id===id)?.email==='skipped'?'No request email was sent.':'Your chosen request email was sent.')+' CALM entry remains on your checklist.');
+      });
       $('initialize').addEventListener('click',()=>action('initialize'));
-      $('install').addEventListener('click',()=>action('installReminders'));
+      $('install').addEventListener('click',()=>action('saveReminders',Number($('reminder-hour').value),true));
       $('stop').addEventListener('click',()=>action('stopReminders'));
+      $('send-now').addEventListener('click',()=>action('sendReminderNow'));
       $('test-mail').addEventListener('click',async()=>{
-       busy(true);
-       try{const result=await rpc('testMail',state.nonce);message('Google MailApp accepted the test. Check your inbox and junk folder. Reference: '+result.reference);}
-       catch(e){message(e.message,true);}
-       finally{try{state=await rpc('getDashboard');}finally{busy(false);}}
+       busy(true);try{const result=await rpc('testMail',state.nonce);message('Google MailApp accepted the test. Check your inbox and junk folder. Reference: '+result.reference);}
+       catch(e){message(e.message,true);}finally{try{render(await rpc('getDashboard'));}finally{busy(false);}}
       });
       function download(name,body){const a=document.createElement('a'),url=URL.createObjectURL(new Blob([body],{type:'text/csv;charset=utf-8'}));a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
       $('export').addEventListener('click',async()=>{try{download('dayoff-FY'+state.config.fiscalYear+'-details.csv',await rpc('exportReport'));}catch(e){message(e.message,true);}});
-      $('export-summary').addEventListener('click',()=>{const t=state.totals;const rows=['category,used_hours,planned_hours,available_now_hours,projected_FY_end_hours'];for(const c of ['vacation','sick','personal'])rows.push([c,money(t.used[c]),money(t.planned[c]),money(t.available[c]),money(t.projected[c])].join(','));download('dayoff-FY'+state.config.fiscalYear+'-balances.csv',rows.join('\r\n'));});
-      rpc('getDashboard').then(s=>{render(s);if(!focus.id)message(s.config.delivery==='disabled'?'Preview mode: calendar and email delivery are disabled.':'Ready.');}).catch(e=>message(e.message,true));
+      $('export-summary').addEventListener('click',()=>{const t=state.totals,rows=['category,used_hours,planned_hours,available_now_hours,projected_FY_end_hours'];for(const c of ['vacation','sick','personal'])rows.push([c,money(t.used[c]),money(t.planned[c]),money(t.available[c]),money(t.projected[c])].join(','));download('dayoff-FY'+state.config.fiscalYear+'-balances.csv',rows.join('\r\n'));});
+      rpc('getDashboard').then(s=>{render(s);message(s.config.delivery==='disabled'?'Preview mode is enabled.':'Ready. Request email defaults to you.');}).catch(e=>message(e.message,true));
     </script>
   </body>
 </html>

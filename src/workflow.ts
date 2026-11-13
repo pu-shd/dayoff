@@ -15,6 +15,7 @@ export interface Ports {
   mail(to: string[], subject: string, body: string): void;
 }
 export function submit(c: Config, p: Ports, input: Input): RecordEntry {
+  input = { ...input, emailTo: input.emailTo ?? "self" };
   const days = createDays(c, input),
     existing = p.list().find((r) => r.id === input.id);
   if (existing) {
@@ -32,7 +33,13 @@ export function submit(c: Config, p: Ports, input: Input): RecordEntry {
     status: "active",
     calm: "pending",
     calendar: "pending",
-    email: "pending",
+    email: input.emailTo === "none" ? "skipped" : "pending",
+    emailRecipients:
+      input.emailTo === "none"
+        ? []
+        : input.emailTo === "management"
+          ? [...c.managementEmails]
+          : [c.ownerEmail],
     created: p.now(),
     updated: p.now(),
   };
@@ -87,12 +94,12 @@ export function sync(c: Config, p: Ports, r: RecordEntry): RecordEntry {
           }
         : managementMessage(c, r);
     try {
-      p.mail(c.managementEmails, msg.subject, msg.body);
+      p.mail(r.emailRecipients ?? c.managementEmails, msg.subject, msg.body);
     } catch {
       r.email = "unknown";
       p.save(r);
       throw new Error(
-        "Email outcome is uncertain. Check Sent mail before recording it as sent. Automatic resending is disabled.",
+        "Email outcome is uncertain. Verify recipient receipt or a delivery trace. Automatic resending is disabled.",
       );
     }
     r.email = "accepted";
@@ -121,7 +128,10 @@ export function cancel(
   r.calm = r.calm === "entered" ? "correction" : "historical";
   r.version++;
   r.calendar = "pending";
-  r.email = "pending";
+  r.email =
+    r.input.emailTo === "none" || r.emailRecipients?.length === 0
+      ? "skipped"
+      : "pending";
   r.updated = p.now();
   p.save(r);
   return sync(c, p, r);

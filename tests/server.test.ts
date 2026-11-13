@@ -16,6 +16,14 @@ function harness(
     cache = new Map<string, string>(),
     events = new Map<string, GoogleAppsScript.Calendar.Schema.Event>(),
     mails: { to: string; subject: string; body: string }[] = [];
+  const triggers: {
+    getHandlerFunction: () => string;
+    getUniqueId: () => string;
+    hour: number;
+    zone: string;
+  }[] = [];
+  let today = "2026-11-13",
+    failMail = false;
   let identity = cfg.ownerEmail,
     created = 0;
   const sheet = {
@@ -71,7 +79,7 @@ function harness(
     },
     Utilities: {
       getUuid: randomUUID,
-      formatDate: () => "2026-11-13",
+      formatDate: () => today,
       DigestAlgorithm: { SHA_256: "sha256" },
       computeDigest: (_algo: string, value: string) => [
         ...createHash("sha256").update(value).digest(),
@@ -92,11 +100,43 @@ function harness(
       },
     },
     MailApp: {
-      sendEmail: (m: { to: string; subject: string; body: string }) =>
-        mails.push(m),
+      sendEmail: (m: { to: string; subject: string; body: string }) => {
+        if (failMail) throw Error("private-provider-details");
+        mails.push(m);
+      },
     },
     ScriptApp: {
-      getProjectTriggers: () => [],
+      getProjectTriggers: () => [...triggers],
+      deleteTrigger: (t: (typeof triggers)[number]) => {
+        triggers.splice(triggers.indexOf(t), 1);
+      },
+      newTrigger: (name: string) => {
+        let hour = 0,
+          zone = "";
+        const builder = {
+          timeBased: () => builder,
+          everyDays: () => builder,
+          atHour: (n: number) => {
+            hour = n;
+            return builder;
+          },
+          inTimezone: (s: string) => {
+            zone = s;
+            return builder;
+          },
+          create: () => {
+            const t = {
+              getHandlerFunction: () => name,
+              getUniqueId: () => randomUUID(),
+              hour,
+              zone,
+            };
+            triggers.push(t);
+            return t;
+          },
+        };
+        return builder;
+      },
       getService: () => ({
         getUrl: () => "https://script.google.com/macros/s/example/exec",
       }),
@@ -122,6 +162,13 @@ function harness(
     events,
     mails,
     created: () => created,
+    triggers,
+    setToday: (s: string) => {
+      today = s;
+    },
+    failMail: () => {
+      failMail = true;
+    },
     setIdentity: (email: string) => {
       identity = email;
     },
@@ -186,6 +233,7 @@ test("reminder GET cannot confirm CALM; explicit confirmation stops reminders", 
     first: "2026-11-16",
     last: "2026-11-16",
   });
+  s = h.api.installReminders(s.nonce);
   h.api.sendCalmReminders();
   assert.equal(h.mails.length, 2);
   assert.equal(h.mails[1].to, cfg.ownerEmail);
@@ -242,4 +290,122 @@ test("GET never sends a diagnostic; identity and nonce checks apply to diagnosti
   h.setIdentity("another@example.edu");
   assert.throws(() => h.api.testMail(s.nonce), /different account/);
   assert.equal(h.mails.length, 0);
+});
+
+test("reminder schedule is configurable, idempotent, pausable, and sends nothing on setup", () => {
+  const h = harness();
+  let s = h.init();
+  s = h.api.saveReminders(s.nonce, 10, true);
+  s = h.api.saveReminders(s.nonce, 11, true);
+  assert.equal(h.triggers.length, 1);
+  assert.equal(h.triggers[0].hour, 11);
+  assert.equal(h.triggers[0].zone, cfg.timeZone);
+  assert.equal(h.mails.length, 0);
+  assert.equal(s.reminders.enabled, true);
+  assert.equal(s.reminders.hour, 11);
+  assert.throws(() => h.api.saveReminders(s.nonce, 24, true), /hour/);
+  s = h.api.getDashboard();
+  s = h.api.stopReminders(s.nonce);
+  assert.equal(h.triggers.length, 0);
+  assert.equal(s.reminders.enabled, false);
+});
+test("silent requests still have CALM reminders; daily digest includes every day and is deduplicated", () => {
+  const h = harness();
+  let s = h.init();
+  s = h.api.createRequest(s.nonce, {
+    id: "request-1234",
+    category: "vacation",
+    mode: "full",
+    first: "2026-11-16",
+    last: "2026-11-17",
+    emailTo: "none",
+  });
+  assert.equal(h.mails.length, 0);
+  assert.equal(s.reminders.pendingCount, 1);
+  s = h.api.sendReminderNow(s.nonce);
+  assert.equal(h.mails.length, 1);
+  assert.match(h.mails[0].body, /2026-11-16/);
+  assert.match(h.mails[0].body, /2026-11-17/);
+  h.api.sendReminderNow(s.nonce);
+  assert.equal(h.mails.length, 1);
+  s = h.api.getDashboard();
+  h.api.confirmCalm(s.nonce, "request-1234", 1);
+  assert.equal(h.api.getDashboard().reminders.pendingCount, 0);
+});
+test("paused and weekend schedules send no digest; uncertain sends do not retry the same day", () => {
+  const h = harness();
+  let s = h.init();
+  s = h.api.createRequest(s.nonce, {
+    id: "request-1234",
+    category: "vacation",
+    mode: "full",
+    first: "2026-11-16",
+    last: "2026-11-16",
+    emailTo: "none",
+  });
+  h.api.sendCalmReminders();
+  assert.equal(h.mails.length, 0);
+  h.api.installReminders(s.nonce);
+  h.setToday("2026-11-14");
+  h.api.sendCalmReminders();
+  assert.equal(h.mails.length, 0);
+  h.setToday("2026-11-16");
+  h.failMail();
+  assert.throws(() => h.api.sendCalmReminders(), /uncertain/);
+  assert.equal(h.properties.get("REMINDER_ATTEMPT_STATE"), "unknown");
+  assert.throws(() => h.api.sendCalmReminders(), /uncertain/);
+  assert.equal(h.mails.length, 0);
+});
+
+test("migration 002 appends routing without changing balances and never runs on GET", () => {
+  const h = harness();
+  let s = h.init();
+  s = h.api.createRequest(s.nonce, {
+    id: "request-1234",
+    category: "vacation",
+    mode: "full",
+    first: "2026-11-16",
+    last: "2026-11-16",
+  });
+  const old = JSON.parse(JSON.stringify(s.records[0])) as RecordEntry;
+  delete old.input.emailTo;
+  delete old.emailRecipients;
+  h.rows.push(["historical", "request", JSON.stringify(old)]);
+  h.properties.set("SCHEMA_VERSION", "1");
+  const rows = h.rows.length,
+    mails = h.mails.length;
+  const before = h.api.getDashboard();
+  assert.equal(h.rows.length, rows);
+  assert.equal(h.properties.get("SCHEMA_VERSION"), "1");
+  const after = h.api.initialize(before.nonce);
+  assert.equal(h.properties.get("SCHEMA_VERSION"), "2");
+  assert.equal(after.records[0].input.emailTo, "management");
+  assert.equal(
+    after.records[0].emailRecipients?.join(","),
+    cfg.managementEmails.join(","),
+  );
+  assert.equal(JSON.stringify(after.totals), JSON.stringify(before.totals));
+  assert.equal(h.mails.length, mails);
+  const upgraded = h.rows.length;
+  h.api.initialize(after.nonce);
+  assert.equal(h.rows.length, upgraded);
+});
+test("cancellations stay in the CALM correction digest until explicitly confirmed", () => {
+  const h = harness();
+  let s = h.init();
+  s = h.api.createRequest(s.nonce, {
+    id: "request-1234",
+    category: "vacation",
+    mode: "full",
+    first: "2026-11-16",
+    last: "2026-11-16",
+    emailTo: "none",
+  });
+  s = h.api.confirmCalm(s.nonce, "request-1234", 1);
+  s = h.api.cancelRequest(s.nonce, "request-1234", 2);
+  assert.equal(s.reminders.pendingCount, 1);
+  s = h.api.sendReminderNow(s.nonce);
+  assert.match(h.mails[0].body, /CORRECT CANCELLED LEAVE/);
+  s = h.api.confirmCalm(s.nonce, "request-1234", 3);
+  assert.equal(s.reminders.pendingCount, 0);
 });

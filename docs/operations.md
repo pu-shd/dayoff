@@ -66,3 +66,15 @@ Google may show an unverified-app notice during first-use consent. The private a
 The Apps Script API creates, uploads and deploys source; it cannot grant runtime consent for you. Resolve administrator scope restrictions through normal Google administration. Do not make the web app anonymous to bypass consent.
 
 Only source and generic examples belong in Git. Keep workbooks, imports, live settings, credentials, and build output private. Builds embed imported attendance data and must never be uploaded as public artifacts.
+
+## Request preview and email choices
+
+The preview presents dates, per-day hours, Calendar titles, and an exact email draft. New requests default to self so the owner can resend the copy to management. Select management to use the configured list or no request email to save silently. CALM reminders remain independent. Retries and cancellation use the stored recipient snapshot.
+
+## CALM reminder controls
+
+Use the CALM checklist to review entries and corrections before confirming completion in PeopleSoft. Choose an hour and enable weekday reminders; saving a new schedule replaces the previous trigger. Pause removes reminder triggers. The preferred hour persists privately across CLI deployments and overrides the configuration file’s default. If the configured timezone changes, save the reminder schedule again.
+
+Send today’s reminder now produces the same digest, including all outstanding dates and hours, even when the recurring schedule is paused. Manual sends and scheduled sends share one-attempt-per-local-date protection. A successful result means MailApp accepted the email. If the outcome is uncertain, check the mailbox or delivery trace; another automatic attempt is allowed on a later weekday if CALM remains outstanding.
+
+Migration 002 appends email-routing metadata without changing existing hours or balances. It runs on the next authorized write or scheduled reminder, never on GET. Old requests used management routing; their snapshot uses the management addresses configured at upgrade. New requests use self by default. No mail is sent by the migration.

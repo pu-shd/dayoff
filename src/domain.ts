@@ -1,5 +1,6 @@
 export type Category = "vacation" | "sick" | "personal" | "other";
 export type Mode = "full" | "half" | "partial";
+export type EmailChoice = "self" | "management" | "none";
 export interface Schedule {
   effective: string;
   start: string;
@@ -30,6 +31,7 @@ export interface Config {
   holidays: string[];
 }
 export interface Input {
+  emailTo?: EmailChoice;
   id: string;
   category: Category;
   mode: Mode;
@@ -53,7 +55,14 @@ export interface RecordEntry {
   status: "active" | "cancelled";
   calm: "pending" | "entered" | "correction" | "historical";
   calendar: "pending" | "done" | "disabled";
-  email: "pending" | "sending" | "accepted" | "unknown" | "disabled";
+  email:
+    | "pending"
+    | "sending"
+    | "accepted"
+    | "unknown"
+    | "disabled"
+    | "skipped";
+  emailRecipients?: string[];
   created: string;
   updated: string;
   legacy?: boolean;
@@ -166,6 +175,11 @@ export function createDays(c: Config, input: Input): Day[] {
   invariant(
     input && /^[a-zA-Z0-9-]{8,80}$/.test(input.id),
     "Invalid request ID.",
+  );
+  invariant(
+    input.emailTo === undefined ||
+      ["self", "management", "none"].includes(input.emailTo),
+    "Invalid request email choice.",
   );
   invariant(
     ["vacation", "sick", "personal", "other"].includes(input.category),
@@ -301,8 +315,16 @@ export function managementMessage(
   c: Config,
   r: RecordEntry,
 ): { subject: string; body: string } {
-  const dates = r.days.map((d) => d.date),
-    dateLabel = dates[0] + (dates.length > 1 ? "–" + dates.at(-1) : "");
+  const dates = r.days.map((d) => d.date);
+  const pretty = (date: string) =>
+    new Intl.DateTimeFormat("en-US", {
+      weekday: "long",
+      month: "2-digit",
+      day: "2-digit",
+      timeZone: "UTC",
+    }).format(new Date(date + "T12:00:00Z"));
+  const dateLabel =
+    pretty(dates[0]) + (dates.length > 1 ? "–" + pretty(dates.at(-1)!) : "");
   const mmdd = (d: string) => d.slice(5, 7) + "/" + d.slice(8, 10);
   const subject =
     "Day Off, " +
@@ -320,9 +342,7 @@ export function managementMessage(
       " hours). I put it on the Staff Calendar. " +
       (r.calm === "entered"
         ? "I entered it into CALM."
-        : "I’ll enter it into CALM.") +
-      "\n\nRequest: " +
-      r.id,
+        : "I’ll enter it into CALM."),
   };
 }
 export function pendingCalm(r: RecordEntry): boolean {

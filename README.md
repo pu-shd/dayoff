@@ -11,7 +11,7 @@ This is a small Google Apps Script web app. Each employee deploys an **owner-onl
 - Monthly capped vacation accrual; sick and personal allowances.
 - Separate used, planned, currently available, and projected balances.
 - Standard calendar titles, absence intervals, hours, and CALM status in notes.
-- Management emails with configurable recipients and accurate CALM wording.
+- Request emails defaulting to self, with management and no-email options.
 - Weekday reminder digests with authenticated confirmation links.
 - Cancellation and CALM correction tracking.
 - Private workbook import and details/balance CSV exports.
@@ -81,9 +81,17 @@ The first adapter sends using Google `MailApp` as the deploying Google account. 
 
 While delivery is disabled, use **Send test email to me** under CALM reminders. The test sends only to the configured owner and creates no leave request or Calendar event. It requires a fresh confirmation nonce and permits one attempt per minute. A success means MailApp accepted the message; confirm actual arrival in your normal mailbox, including Junk. If it fails or does not arrive, retain preview mode while a Microsoft 365 adapter is configured.
 
-Verify the sender, management recipients, Calendar ID, schedules, holidays, and policy. Set `delivery: "google"` locally and run `./scripts/update.sh`. Creating a request in live mode explicitly records it, updates Calendar, and sends management email. Preview never sends.
+Verify the sender, management recipients, Calendar ID, schedules, holidays, and policy. Set `delivery: "google"` locally and run `./scripts/update.sh`. Preview shows a request summary, daily hours, Calendar title, and the exact email draft. Nothing is saved or sent until you choose Save.
 
-Enable daily reminders in the app. One weekday digest goes to your owner email around the configured hour. Links open the record for review; they never mark CALM entered merely by being followed. Confirm after actually entering CALM. A cancellation after CALM entry remains on the correction checklist until confirmed.
+Request email defaults to **Email me a copy to resend**. You can instead select **Email the configured management recipients** or **No request email**. Saving always records the leave and updates Calendar; CALM tracking works with all three email choices. Each request retains its recipient choice for retries and cancellation notices. A new request defaults to self again.
+
+## CALM checklist and reminders
+
+The CALM section lists outstanding entries and corrections with dates, category, and hours. After updating PeopleSoft, choose **Confirm entered in CALM** or **Confirm CALM corrected**. Reminder links open and highlight the record for review; following a link never marks it entered. Older links ask you to review the latest revision.
+
+Choose a reminder hour and select **Enable weekday reminders**. The app retains this setting privately, replacing previous reminder triggers so only one schedule remains. Delivery occurs around that hour in your configured timezone, Monday–Friday. Use **Update reminder schedule** to change the hour, **Pause reminders** to stop the schedule, or **Send today’s reminder now** for an on-demand digest. The section shows the last successful send and uncertain outcomes.
+
+Digests go only to your owner email, independently of request-email choices. They include every outstanding date and its hours. No digest is sent when the checklist is empty. At most one digest is attempted per local date; uncertain sends are not automatically repeated that day. A cancellation after CALM entry remains on the correction checklist until you confirm it.
 
 ## Balances and imported history
 

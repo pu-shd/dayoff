@@ -13,13 +13,14 @@ import {
   type Input,
 } from "./domain.js";
 import { submit, sync, cancel, markCalm, type Ports } from "./workflow.js";
+import { migration002 } from "./migrations.js";
 declare const DAYOFF_CONFIG: Config;
 declare const DAYOFF_SEED: {
   policy?: Partial<Config["policy"]>;
   records: RecordEntry[];
   warnings?: string[];
 };
-const SCHEMA = 1;
+const SCHEMA = 2;
 function config(): Config {
   return validateConfig({
     ...DAYOFF_CONFIG,
@@ -48,7 +49,7 @@ function store() {
   invariant(id, "Initialize your private ledger first.");
   const book = SpreadsheetApp.openById(id);
   invariant(
-    props().getProperty("SCHEMA_VERSION") === String(SCHEMA),
+    ["1", "2"].includes(props().getProperty("SCHEMA_VERSION") || ""),
     "Unsupported ledger schema. Apply a versioned migration.",
   );
   const sheet = book.getSheetByName("Journal");
@@ -68,6 +69,22 @@ function list(): RecordEntry[] {
 }
 function save(r: RecordEntry) {
   store().appendRow([new Date().toISOString(), "request", JSON.stringify(r)]);
+}
+function migrate(c: Config) {
+  if (
+    !props().getProperty("LEDGER_ID") ||
+    props().getProperty("SCHEMA_VERSION") === String(SCHEMA)
+  )
+    return;
+  invariant(
+    props().getProperty("SCHEMA_VERSION") === "1",
+    "Unsupported ledger schema.",
+  );
+  for (const r of list()) {
+    const upgraded = migration002(r, c);
+    if (upgraded !== r) save(upgraded);
+  }
+  props().setProperty("SCHEMA_VERSION", String(SCHEMA));
 }
 function locked<T>(fn: () => T): T {
   const lock = LockService.getScriptLock();
@@ -99,6 +116,7 @@ function guard<T>(token: string, fn: (c: Config) => T): T {
   return locked(() => {
     const c = actor();
     consume(token);
+    migrate(c);
     return fn(c);
   });
 }
@@ -199,6 +217,7 @@ function dashboard(c: Config) {
     remindersInstalled: ScriptApp.getProjectTriggers().some(
       (t) => t.getHandlerFunction() === "sendCalmReminders",
     ),
+    reminders: reminderSettings(c, records),
     selectedUrl: ScriptApp.getService().getUrl(),
   };
 }
@@ -242,7 +261,7 @@ function initialize(token: string) {
             r.legacy === true && r.calm === "historical",
             "Invalid historical import.",
           );
-          save(r);
+          save(migration002(r, c));
         }
       return dashboard(c);
     }),
@@ -256,7 +275,11 @@ function preview(input: Input) {
       { ...ports(c), list: () => [] },
       input,
     );
-    return { ...r, message: managementMessage(c, r) };
+    return {
+      ...r,
+      message: managementMessage(c, r),
+      calendarPreview: r.days.map((d) => ({ ...d, title: title(c, d) })),
+    };
   });
 }
 function createRequest(token: string, input: Input) {
@@ -322,34 +345,63 @@ function resolveEmail(
     }),
   );
 }
-function installReminders(token: string) {
+function reminderSettings(c: Config, records: RecordEntry[]) {
+  const raw = props().getProperty("REMINDER_HOUR");
+  const hour = raw === null ? c.reminderHour : Number(raw);
+  const installed = ScriptApp.getProjectTriggers().some(
+    (t) => t.getHandlerFunction() === "sendCalmReminders",
+  );
+  return {
+    enabled:
+      installed &&
+      props().getProperty("REMINDERS_ENABLED") !== "false" &&
+      c.delivery === "google",
+    hour,
+    timeZone: c.timeZone,
+    recipient: c.ownerEmail,
+    pendingCount: records.filter(pendingCalm).length,
+    lastSentDate: props().getProperty("LAST_REMINDER"),
+    lastSentAt: props().getProperty("LAST_REMINDER_AT"),
+    attemptDate: props().getProperty("REMINDER_ATTEMPT_DATE"),
+    attemptState: props().getProperty("REMINDER_ATTEMPT_STATE"),
+  };
+}
+function saveReminders(token: string, hour: number, enabled: boolean) {
   return safe(() =>
     guard(token, (c) => {
-      invariant(c.delivery === "google", "Delivery is disabled.");
-      if (
-        !ScriptApp.getProjectTriggers().some(
-          (t) => t.getHandlerFunction() === "sendCalmReminders",
-        )
-      )
+      invariant(
+        Number.isInteger(hour) && hour >= 0 && hour <= 23,
+        "Invalid reminder hour.",
+      );
+      invariant(typeof enabled === "boolean", "Invalid reminder setting.");
+      if (enabled) invariant(c.delivery === "google", "Delivery is disabled.");
+      const old = ScriptApp.getProjectTriggers().filter(
+        (t) => t.getHandlerFunction() === "sendCalmReminders",
+      );
+      // Create first so a failed replacement leaves the previous schedule intact.
+      if (enabled)
         ScriptApp.newTrigger("sendCalmReminders")
           .timeBased()
           .everyDays(1)
-          .atHour(c.reminderHour)
+          .atHour(hour)
           .inTimezone(c.timeZone)
           .create();
+      for (const trigger of old) ScriptApp.deleteTrigger(trigger);
+      props().setProperties({
+        REMINDER_HOUR: String(hour),
+        REMINDERS_ENABLED: String(enabled),
+      });
       return dashboard(c);
     }),
   );
 }
+function installReminders(token: string) {
+  const c = actor();
+  return saveReminders(token, reminderSettings(c, []).hour, true);
+}
 function stopReminders(token: string) {
-  return safe(() =>
-    guard(token, (c) => {
-      ScriptApp.getProjectTriggers()
-        .filter((t) => t.getHandlerFunction() === "sendCalmReminders")
-        .forEach((t) => ScriptApp.deleteTrigger(t));
-      return dashboard(c);
-    }),
-  );
+  const c = actor();
+  return saveReminders(token, reminderSettings(c, []).hour, false);
 }
 function testMail(token: string) {
   return safe(() =>
@@ -380,50 +432,91 @@ function testMail(token: string) {
     }),
   );
 }
+function sendDigest(c: Config) {
+  invariant(c.delivery === "google", "Delivery is disabled.");
+  const today = Utilities.formatDate(new Date(), c.timeZone, "yyyy-MM-dd"),
+    pending = list().filter(pendingCalm);
+  if (!pending.length)
+    return {
+      sent: false,
+      notice: "No outstanding CALM entries or corrections.",
+    };
+  if (props().getProperty("LAST_REMINDER") === today)
+    return {
+      sent: false,
+      notice: "A CALM reminder has already been sent today.",
+    };
+  invariant(
+    props().getProperty("REMINDER_ATTEMPT_DATE") !== today,
+    "Email reminder outcome is uncertain. Check your inbox before another attempt.",
+  );
+  const url = ScriptApp.getService().getUrl();
+  invariant(url, "No web deployment is available.");
+  const lines = pending.map(
+    (r) =>
+      (r.calm === "correction" ? "CORRECT CANCELLED LEAVE" : "ENTER LEAVE") +
+      " — " +
+      r.input.category +
+      " — " +
+      hoursText(r.days.reduce((n, d) => n + d.hours, 0)) +
+      " hours\n" +
+      r.days
+        .map((d) => d.date + ": " + hoursText(d.hours) + " hours")
+        .join("\n") +
+      "\nReview and confirm: " +
+      url +
+      "?request=" +
+      encodeURIComponent(r.id) +
+      "&version=" +
+      r.version,
+  );
+  props().setProperties({
+    REMINDER_ATTEMPT_DATE: today,
+    REMINDER_ATTEMPT_STATE: "sending",
+  });
+  try {
+    MailApp.sendEmail({
+      to: c.ownerEmail,
+      subject:
+        "CALM: " +
+        pending.length +
+        " outstanding " +
+        (pending.length === 1 ? "request" : "requests"),
+      body:
+        "Update these records in CALM, then open each link and confirm in Dayoff. Opening a link does not mark anything entered.\n\n" +
+        lines.join("\n\n"),
+    });
+  } catch {
+    props().setProperty("REMINDER_ATTEMPT_STATE", "unknown");
+    throw new Error(
+      "Email reminder outcome is uncertain. Check your inbox before retrying.",
+    );
+  }
+  props().setProperties({
+    LAST_REMINDER: today,
+    LAST_REMINDER_AT: new Date().toISOString(),
+    REMINDER_ATTEMPT_STATE: "accepted",
+  });
+  return { sent: true, notice: "CALM reminder sent to your email address." };
+}
+function sendReminderNow(token: string) {
+  return safe(() =>
+    guard(token, (c) => {
+      const result = sendDigest(c);
+      return { ...dashboard(c), notice: result.notice };
+    }),
+  );
+}
 function sendCalmReminders() {
   return safe(() =>
     locked(() => {
       const c = actor();
       if (c.delivery !== "google") return;
-      const now = new Date(),
-        today = Utilities.formatDate(now, c.timeZone, "yyyy-MM-dd");
-      if (
-        [0, 6].includes(new Date(today + "T12:00:00Z").getUTCDay()) ||
-        props().getProperty("LAST_REMINDER") === today
-      )
-        return;
-      const pending = list().filter(pendingCalm);
-      if (!pending.length) return;
-      const url = ScriptApp.getService().getUrl();
-      invariant(url, "No web deployment is available.");
-      const lines = pending.map(
-        (r) =>
-          r.days[0].date +
-          " — " +
-          r.input.category +
-          " — " +
-          hoursText(r.days.reduce((n, d) => n + d.hours, 0)) +
-          " hours" +
-          (r.calm === "correction" ? " — CANCEL IN CALM" : "") +
-          "\n" +
-          url +
-          "?request=" +
-          encodeURIComponent(r.id) +
-          "&version=" +
-          r.version,
-      );
-      MailApp.sendEmail({
-        to: c.ownerEmail,
-        subject:
-          "CALM: " +
-          pending.length +
-          " outstanding leave " +
-          (pending.length === 1 ? "entry" : "entries"),
-        body:
-          "Enter or correct these records in CALM, then open each link to confirm.\n\n" +
-          lines.join("\n\n"),
-      });
-      props().setProperty("LAST_REMINDER", today);
+      migrate(c);
+      if (!reminderSettings(c, []).enabled) return;
+      const today = Utilities.formatDate(new Date(), c.timeZone, "yyyy-MM-dd");
+      if ([0, 6].includes(new Date(today + "T12:00:00Z").getUTCDay())) return;
+      return sendDigest(c);
     }),
   );
 }
@@ -470,6 +563,8 @@ export const handlers = {
   retryRequest,
   resolveEmail,
   installReminders,
+  saveReminders,
+  sendReminderNow,
   stopReminders,
   testMail,
   sendCalmReminders,

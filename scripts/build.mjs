@@ -59,6 +59,8 @@ const handlers = [
   "retryRequest",
   "resolveEmail",
   "installReminders",
+  "saveReminders",
+  "sendReminderNow",
   "stopReminders",
   "testMail",
   "sendCalmReminders",

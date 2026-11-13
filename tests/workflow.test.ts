@@ -98,3 +98,55 @@ test("overlapping requests are rejected before side effects", () => {
   );
   assert.equal(calls.calendar, 1);
 });
+
+test("request email defaults to self and supports management or no email", () => {
+  for (const route of [undefined, "management", "none"] as const) {
+    const { p, calls } = mock();
+    const recipients: string[][] = [];
+    p.mail = (to) => {
+      recipients.push([...to]);
+      calls.mail++;
+    };
+    const r = submit(cfg, p, {
+      ...input,
+      ...(route ? { emailTo: route } : {}),
+    });
+    assert.equal(calls.calendar, 1);
+    assert.deepEqual(
+      recipients,
+      route === "none"
+        ? []
+        : [route === "management" ? cfg.managementEmails : [cfg.ownerEmail]],
+    );
+    assert.equal(r.calm, "pending");
+    assert.equal(r.email, route === "none" ? "skipped" : "accepted");
+  }
+});
+test("email recipients are retained across retries and cancellations; none stays silent", () => {
+  const { p } = mock();
+  const destinations: string[][] = [];
+  p.mail = (to) => {
+    destinations.push([...to]);
+  };
+  const r = submit(cfg, p, { ...input, emailTo: "management" });
+  cancel(
+    { ...cfg, managementEmails: ["changed@example.edu"] },
+    p,
+    r.id,
+    r.version,
+  );
+  assert.deepEqual(destinations, [cfg.managementEmails, cfg.managementEmails]);
+  const silent = mock();
+  submit(cfg, silent.p, { ...input, emailTo: "none" });
+  cancel(cfg, silent.p, input.id, 1);
+  assert.equal(silent.calls.mail, 0);
+});
+test("invalid email choices cannot write or send", () => {
+  const { p, calls } = mock();
+  assert.throws(
+    () => submit(cfg, p, { ...input, emailTo: "arbitrary" as "self" }),
+    /email/i,
+  );
+  assert.deepEqual(calls, { calendar: 0, mail: 0 });
+  assert.equal(p.list().length, 0);
+});
