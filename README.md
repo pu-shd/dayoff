@@ -25,10 +25,20 @@ Requirements: macOS with zsh (or zsh on Linux), Node.js 24.11.1+, Docker, `docke
 ```sh
 git clone https://github.com/pu-shd/dayoff.git
 cd dayoff
-./scripts/bootstrap-local.sh
+./scripts/bootstrap-local.sh --calendar-id 'YOUR_STAFF_CALENDAR_ID'
 ```
 
-Edit `local/config.json`. Configure your **owner email**, **display name**, **managementEmails**, **Staff Calendar ID**, FY, allowances, schedules, holidays, and reminder hour. Every employee can have different management recipients and reporting lines.
+The bootstrap command sets the supplied Calendar ID in private configuration and preserves existing settings when re-run. Review it first with `./scripts/bootstrap-local.sh --calendar-id 'YOUR_STAFF_CALENDAR_ID' --dry-run`. To change the ID later without reinstalling dependencies:
+
+```sh
+node scripts/configure.ts --calendar-id 'YOUR_STAFF_CALENDAR_ID' --dry-run
+node scripts/configure.ts --calendar-id 'YOUR_STAFF_CALENDAR_ID'
+./scripts/update.sh
+```
+
+The command follows `DAYOFF_CONFIG` in the environment or `.env`, defaulting to `local/config.json`. It also accepts `--config PATH`. Use the Calendar ID from Calendar settings, not a sharing URL. The ID is not printed in logs or written into source files.
+
+Edit `local/config.json` to configure your **owner email**, **display name**, **managementEmails**, FY, allowances, schedules, holidays, and reminder hour. Every employee can have different management recipients and reporting lines.
 
 Keep `delivery: "disabled"` for your first trial. All amounts are integer hundredths of an hour: 725 means 7.25 hours and 363 means 3.63 hours. Example schedule transition dates and the lunch window are placeholders; replace them with your actual dates and lunch period.
 
@@ -55,7 +65,9 @@ CLI authorization and runtime authorization are separate. Google can require bro
 
 ## Enable live delivery
 
-The first adapter sends using Google `MailApp` as the deploying Google account. It does **not** send through Outlook simply because both accounts share an email address. Microsoft 365 delivery requires a separate approved adapter; leave delivery disabled if Outlook is required.
+The first adapter sends using Google `MailApp` as the deploying Google account. MailApp is a sending service separate from Gmail; Google documents that it can send for accounts that do not use Gmail. An Outlook-provisioned account may therefore work, subject to its organization's configuration. This does **not** send through Microsoft 365. See [Google's explanation](https://workspace.google.com/blog/product-announcements/change-to-mail-service-in-apps-script).
+
+While delivery is disabled, use **Send test email to me** under CALM reminders. The test sends only to the configured owner and creates no leave request or Calendar event. It requires a fresh confirmation nonce and permits one attempt per minute. A success means MailApp accepted the message; confirm actual arrival in your normal mailbox, including Junk. If it fails or does not arrive, retain preview mode while a Microsoft 365 adapter is configured.
 
 Verify the sender, management recipients, Calendar ID, schedules, holidays, and policy. Set `delivery: "google"` locally and run `./scripts/update.sh`. Creating a request in live mode explicitly records it, updates Calendar, and sends management email. Preview never sends.
 

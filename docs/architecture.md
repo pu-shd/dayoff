@@ -14,7 +14,7 @@ Amounts are integer hundredths of an hour. Partial working minutes round to the 
 
 Calendar event IDs derive deterministically from request ID and date. Each working day gets one event. Full days use exclusive next-day end dates; timed events include the configured timezone. Retried duplicate inserts update the existing event. Categories remain private to the ledger and management email; Calendar notes contain hours, CALM status, and a reference. Extended properties are correlation metadata, not a confidentiality boundary.
 
-Calendar completes before management email. The journal records email sending before MailApp and accepted afterward. An exception leaves unknown; process interruption can leave sending. Neither state is automatically resent. Check Sent mail; if absent, manually send the intended message before confirming it. Provider acceptance does not prove delivery.
+Calendar completes before management email. The journal records email sending before MailApp and accepted afterward. An exception leaves unknown; process interruption can leave sending. Neither state is automatically resent. Confirm recipient receipt or consult a delivery trace. MailApp need not create a copy in Outlook Sent; absence there does not establish failure. Manually resend only after establishing non-delivery. Provider acceptance does not prove delivery.
 
 Cancellation removes app-owned events and reverses personal usage. If CALM was entered, its correction stays outstanding. Management receives a cancellation notice. Dates/hours changes use cancellation plus replacement in this version.
 

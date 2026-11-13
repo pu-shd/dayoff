@@ -2,6 +2,10 @@
 
 Configuration comes from the file selected by DAYOFF_CONFIG in the environment or private .env. The builder parses .env as data rather than executing it. Apps Script has no Node environment; local configuration is validated and bundled into ignored deployment output.
 
+Set the Staff Calendar ID through `node scripts/configure.ts --calendar-id 'YOUR_STAFF_CALENDAR_ID'`, or supply the same flag to `./scripts/bootstrap-local.sh`. Both support `--dry-run`. This updates private configuration while retaining delivery mode, reporting recipients, allowances, and schedules. Run `./scripts/update.sh` to apply changes to the deployed app. Coworkers supply their own ID; no live organizational Calendar ID belongs in the public example.
+
+The owner-only MailApp diagnostic can run in preview mode via **Send test email to me**. It sends no attendance information and cannot target management or arbitrary recipients. Check mailbox receipt rather than relying solely on provider acceptance. The Apps Script CLI cannot always invoke functions on a default Cloud project; the authenticated web app is the supported fallback. Calendar and email diagnostics must not create real leave entries.
+
 ## First use
 
 1. Deploy with delivery disabled.
@@ -19,7 +23,7 @@ Each employee configures their own reporting line. Do not share a personal deplo
 
 Use Retry incomplete steps for pending Calendar work. Stable IDs prevent duplicate events.
 
-For email unknown or sending, check Sent mail. If absent, manually send the intended message, then confirm its presence. Never create another request to work around an uncertain send.
+For email unknown or sending, confirm recipient receipt or consult a delivery trace. MailApp need not populate Outlook Sent, so absence there does not prove non-delivery. Resend manually only after establishing non-delivery, then confirm receipt. Never create another request to work around an uncertain send.
 
 CALM confirmation is saved before Calendar notes update. If that update fails, retry the Calendar operation; CALM remains confirmed.
 

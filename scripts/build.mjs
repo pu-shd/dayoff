@@ -60,6 +60,7 @@ const handlers = [
   "resolveEmail",
   "installReminders",
   "stopReminders",
+  "testMail",
   "sendCalmReminders",
   "exportReport",
   "health",

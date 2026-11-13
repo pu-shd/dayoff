@@ -312,7 +312,7 @@ function resolveEmail(
       );
       invariant(
         accepted === true,
-        "Only confirm after checking Sent mail. Resubmission requires manual review.",
+        "Only confirm after verifying receipt or a delivery trace. Resubmission requires manual review.",
       );
       r.email = "accepted";
       r.version++;
@@ -348,6 +348,35 @@ function stopReminders(token: string) {
         .filter((t) => t.getHandlerFunction() === "sendCalmReminders")
         .forEach((t) => ScriptApp.deleteTrigger(t));
       return dashboard(c);
+    }),
+  );
+}
+function testMail(token: string) {
+  return safe(() =>
+    guard(token, (c) => {
+      const now = Date.now(),
+        last = Number(props().getProperty("LAST_MAIL_TEST") || 0);
+      invariant(
+        now - last >= 60000,
+        "Only one delivery test is allowed per minute.",
+      );
+      // Record the attempt before sending: an uncertain result must not auto-retry.
+      props().setProperty("LAST_MAIL_TEST", String(now));
+      const reference = Utilities.getUuid();
+      try {
+        MailApp.sendEmail({
+          to: c.ownerEmail,
+          subject: "Dayoff email delivery test",
+          body:
+            "This is a one-time Google Apps Script MailApp delivery test. No leave request or calendar event was created.\n\nReference: " +
+            reference,
+        });
+      } catch {
+        throw new Error(
+          "Email test outcome is uncertain. Check your inbox before retrying.",
+        );
+      }
+      return { accepted: true, reference };
     }),
   );
 }
@@ -442,6 +471,7 @@ export const handlers = {
   resolveEmail,
   installReminders,
   stopReminders,
+  testMail,
   sendCalmReminders,
   exportReport,
   health,

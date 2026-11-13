@@ -213,3 +213,33 @@ test("HTML script parses and uses text nodes for user content", () => {
   assert.doesNotThrow(() => new Function(script));
   assert.doesNotMatch(script, /innerHTML/);
 });
+
+test("MailApp diagnostic targets only the owner while normal delivery is disabled", () => {
+  const h = harness("disabled");
+  const s = h.init(),
+    before = h.rows.length;
+  const result = h.api.testMail(s.nonce);
+  assert.equal(result.accepted, true);
+  assert.equal(h.mails.length, 1);
+  assert.equal(h.mails[0].to, cfg.ownerEmail);
+  assert.match(h.mails[0].subject, /Dayoff.*test/i);
+  assert.equal(h.rows.length, before);
+  assert.equal(h.events.size, 0);
+  assert.throws(
+    () => h.api.testMail(h.api.getDashboard().nonce),
+    /one delivery test/,
+  );
+  assert.equal(h.mails.length, 1);
+});
+test("GET never sends a diagnostic; identity and nonce checks apply to diagnostics", () => {
+  const h = harness("disabled");
+  h.api.doGet({
+    parameter: { mailTest: "1" },
+  } as unknown as GoogleAppsScript.Events.DoGet);
+  assert.equal(h.mails.length, 0);
+  assert.throws(() => h.api.testMail("invalid"), /Invalid confirmation/);
+  const s = h.init();
+  h.setIdentity("another@example.edu");
+  assert.throws(() => h.api.testMail(s.nonce), /different account/);
+  assert.equal(h.mails.length, 0);
+});

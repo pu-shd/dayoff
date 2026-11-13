@@ -357,6 +357,14 @@
             confirm after updating CALM.
           </p>
           <p id="reminder-status" class="muted"></p>
+          <p class="muted">
+            Before enabling reminders, send a single MailApp test to your own
+            email address. This also works in preview mode and creates no leave
+            record.
+          </p>
+          <button id="test-mail" class="secondary">
+            Send test email to me
+          </button>
           <div class="actions">
             <button id="install" class="secondary">
               Enable daily reminders</button
@@ -411,7 +419,7 @@
        if(!r.legacy){
        if(r.calm==='correction'||r.status==='active'&&r.calm==='pending')actions.append(button(r.calm==='correction'?'Confirm CALM corrected':'Confirm entered in CALM',()=>{if(confirm('Have you '+(r.calm==='correction'?'corrected':'entered')+' these dates and hours in CALM?'))action('confirmCalm',r.id,r.version);}));
        if(r.calendar==='pending'||r.email==='pending')actions.append(button('Retry incomplete steps',()=>action('retryRequest',r.id)));
-       if(r.email==='unknown'||r.email==='sending')actions.append(button('Email appears in Sent',()=>{if(confirm('Confirm that the management email appears in your Sent mail.'))action('resolveEmail',r.id,r.version,true);}));
+       if(r.email==='unknown'||r.email==='sending')actions.append(button('Confirm email received',()=>{if(confirm('Confirm that the recipient received the management email, or that an administrator verified delivery.'))action('resolveEmail',r.id,r.version,true);}));
        if(r.status==='active')actions.append(button('Cancel request',()=>{if(confirm('Cancel this request, remove its calendar events and email management? CALM correction will remain on your checklist if needed.'))action('cancelRequest',r.id,r.version);},'danger'));
        }
        row.append(actions);tbody.append(row);
@@ -431,6 +439,12 @@
       $('initialize').addEventListener('click',()=>action('initialize'));
       $('install').addEventListener('click',()=>action('installReminders'));
       $('stop').addEventListener('click',()=>action('stopReminders'));
+      $('test-mail').addEventListener('click',async()=>{
+       busy(true);
+       try{const result=await rpc('testMail',state.nonce);message('Google MailApp accepted the test. Check your inbox and junk folder. Reference: '+result.reference);}
+       catch(e){message(e.message,true);}
+       finally{try{state=await rpc('getDashboard');}finally{busy(false);}}
+      });
       function download(name,body){const a=document.createElement('a'),url=URL.createObjectURL(new Blob([body],{type:'text/csv;charset=utf-8'}));a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
       $('export').addEventListener('click',async()=>{try{download('dayoff-FY'+state.config.fiscalYear+'-details.csv',await rpc('exportReport'));}catch(e){message(e.message,true);}});
       $('export-summary').addEventListener('click',()=>{const t=state.totals;const rows=['category,used_hours,planned_hours,available_now_hours,projected_FY_end_hours'];for(const c of ['vacation','sick','personal'])rows.push([c,money(t.used[c]),money(t.planned[c]),money(t.available[c]),money(t.projected[c])].join(','));download('dayoff-FY'+state.config.fiscalYear+'-balances.csv',rows.join('\r\n'));});
