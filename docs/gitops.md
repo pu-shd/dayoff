@@ -1,5 +1,7 @@
 # CLI and GitOps operation
 
+For a generic public app and a separate private settings/workbook repository, use [private deployment repositories](private-instance.md). Its workflow builds the pinned public revision directly from private source files. The instructions below describe the original single-repository workflow with encrypted configuration secrets; choose one workflow for each instance.
+
 Bootstrap once from a trusted workstation using the README. The pinned clasp CLI creates the project, pushes the bundle and creates an owner-only deployment. Its ID is saved privately in local/deployment.json and reused for updates.
 
 ```sh

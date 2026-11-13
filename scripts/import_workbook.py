@@ -54,7 +54,13 @@ def amount(cells: dict[str, str], address: str, required: bool = False) -> int:
     return int((number * 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
 
-def convert(cells: dict[str, str], year: int) -> dict:
+def convert(cells: dict[str, str], year: int, hr_system_name: str = "HR accounting system") -> dict:
+    if (
+        not hr_system_name.strip()
+        or len(hr_system_name) > 80
+        or any(c in hr_system_name for c in "\r\n<>")
+    ):
+        raise ValueError("Invalid HR system display name.")
     if not 2000 <= year <= 2200:
         raise ValueError("Invalid fiscal year.")
     if not cells.get("A20", "").lower().startswith("jul") or not cells.get(
@@ -71,7 +77,7 @@ def convert(cells: dict[str, str], year: int) -> dict:
     }
     records: list[dict] = []
     warnings = [
-        "Imported monthly totals use month-end dates; daily hours and HR entry status cannot be inferred. Check existing future bookings before creating new requests."
+        f"Imported monthly totals use month-end dates; daily hours and {hr_system_name} status cannot be inferred. Check existing future bookings before creating new requests."
     ]
     header = cells.get("AK1", "")
     if header != str(year):
@@ -139,7 +145,9 @@ def digest(value: object) -> str:
     return hashlib.sha256(json.dumps(value, sort_keys=True).encode()).hexdigest()
 
 
-def collate_history(folder: Path, anchor_fy: int) -> dict:
+def collate_history(
+    folder: Path, anchor_fy: int, hr_system_name: str = "HR accounting system"
+) -> dict:
     """Preserve source facts; work backwards without solving through carry caps."""
     sources: dict[int, Path] = {}
     for path in sorted(folder.glob("*.xlsx")):
@@ -156,7 +164,7 @@ def collate_history(folder: Path, anchor_fy: int) -> dict:
     fingerprints: dict[str, list[int]] = {}
     for year, path in sorted(sources.items(), reverse=True):
         cells = read_cells(path)
-        converted = convert(cells, year)
+        converted = convert(cells, year, hr_system_name)
         months, daily, unmapped = [], [], []
         raw_grid = []
         for index in range(12):
@@ -302,6 +310,7 @@ def main() -> None:
     parser.add_argument("workbook", type=Path, nargs="?")
     parser.add_argument("--source-directory", type=Path)
     parser.add_argument("--anchor-fy", type=int)
+    parser.add_argument("--hr-system-name", default="HR accounting system")
     parser.add_argument(
         "--fy",
         type=int,
@@ -318,11 +327,11 @@ def main() -> None:
     if args.source_directory:
         if args.workbook or args.fy or not args.anchor_fy:
             parser.error("Use --source-directory with --anchor-fy, without workbook or --fy.")
-        result = collate_history(args.source_directory, args.anchor_fy)
+        result = collate_history(args.source_directory, args.anchor_fy, args.hr_system_name)
     else:
         if not args.workbook or not args.fy or args.anchor_fy:
             parser.error("Use a workbook and --fy, or --source-directory and --anchor-fy.")
-        result = convert(read_cells(args.workbook), args.fy)
+        result = convert(read_cells(args.workbook), args.fy, args.hr_system_name)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(json.dumps(result, indent=2) + "\n")
     target.chmod(0o600)

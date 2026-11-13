@@ -22,6 +22,8 @@ This is a small Google Apps Script web app. Each employee deploys an **owner-onl
 
 ## Install your own instance
 
+The public repository contains reusable code and examples. For a separate private repository containing your settings and original Excel files, see [private deployment repositories](docs/private-instance.md). That workflow pins the public code and preserves an existing Apps Script project, deployment URL and ledger.
+
 Requirements: macOS with zsh (or zsh on Linux), Node.js 24.11.1+, Docker, `docker-compose`, and a Google account allowed to use Apps Script and edit your Staff Calendar. The optional importer uses Python 3.13+ and a project-local `.venv`; `uv` manages its locked development dependencies.
 
 ```sh

@@ -44,6 +44,16 @@ class ImportTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "do not match"):
             module.convert(cells, 2027)
 
+    def test_hr_display_override_preserves_legacy_import_identity(self):
+        generic = module.convert(self.cells(), 2027)
+        configured = module.convert(self.cells(), 2027, "Example HR")
+        self.assertIn("HR accounting system status", generic["warnings"][0])
+        self.assertIn("Example HR status", configured["warnings"][0])
+        self.assertEqual(generic["records"], configured["records"])
+        self.assertEqual(generic["policy"], configured["policy"])
+        with self.assertRaisesRegex(ValueError, "HR"):
+            module.convert(self.cells(), 2027, "invalid\nname")
+
     def test_missing_policy_and_unknown_layout_fail_explicitly(self):
         cells = self.cells()
         del cells["T13"]

@@ -5,4 +5,5 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --locked
 COPY scripts/import_workbook.py scripts/import_workbook.py
 COPY tests/test_import_workbook.py tests/test_import_workbook.py
-CMD ["sh", "-c", "uv run --frozen ruff check scripts/import_workbook.py tests/test_import_workbook.py && uv run --frozen ruff format --check scripts/import_workbook.py tests/test_import_workbook.py && uv run --frozen mypy scripts/import_workbook.py tests/test_import_workbook.py && uv run --frozen python -m unittest discover -s tests -p 'test_*.py' -v"]
+COPY templates/config-repo/scripts/check_sources.py templates/config-repo/scripts/check_sources.py
+CMD ["sh", "-c", "uv run --frozen ruff check scripts/import_workbook.py tests/test_import_workbook.py templates/config-repo/scripts/check_sources.py && uv run --frozen ruff format --check scripts/import_workbook.py tests/test_import_workbook.py templates/config-repo/scripts/check_sources.py && uv run --frozen mypy scripts/import_workbook.py tests/test_import_workbook.py templates/config-repo/scripts/check_sources.py && uv run --frozen python -m unittest discover -s tests -p 'test_*.py' -v"]

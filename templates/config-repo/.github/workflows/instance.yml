@@ -1,0 +1,88 @@
+name: Instance checks and deployment
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      operation:
+        type: choice
+        options: [deploy, teardown]
+        default: deploy
+        required: true
+      dry_run:
+        type: boolean
+        default: true
+        required: true
+permissions:
+  contents: read
+concurrency:
+  group: dayoff-instance
+  cancel-in-progress: false
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.11.1"
+      - name: Require a private configuration repository
+        if: github.event.repository.private != true
+        run: exit 1
+      - name: Install shell and docker-compose CLI
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y zsh
+          mkdir -p "$HOME/.local/bin"
+          printf '#!/bin/sh\nexec docker compose "$@"\n' > "$HOME/.local/bin/docker-compose"
+          chmod +x "$HOME/.local/bin/docker-compose"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Validate private sources and test the pinned application in containers
+        run: ./scripts/test.sh
+  deploy:
+    needs: checks
+    if: vars.DAYOFF_GITOPS_ENABLED == 'true' && github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: dayoff
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.11.1"
+      - name: Install shell and uv
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y zsh
+          pipx install uv==0.9.5
+      - name: Restore ephemeral Apps Script authentication
+        env:
+          CLASP_AUTH_JSON: ${{ secrets.CLASP_AUTH_JSON }}
+        run: |
+          node - <<'NODE'
+          const fs=require('node:fs'),path=require('node:path');
+          if(!process.env.CLASP_AUTH_JSON)throw Error('Missing CLASP_AUTH_JSON environment secret.');
+          const auth=JSON.parse(process.env.CLASP_AUTH_JSON);
+          fs.writeFileSync(path.join(process.env.RUNNER_TEMP,'dayoff-clasp.json'),JSON.stringify(auth),{mode:0o600});
+          NODE
+      - name: Deploy or teardown from private sources
+        env:
+          clasp_config_auth: ${{ runner.temp }}/dayoff-clasp.json
+          OPERATION: ${{ inputs.operation || 'deploy' }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}
+        run: |
+          set -euo pipefail
+          if [ "$DRY_RUN" = true ]; then
+            "./scripts/$OPERATION.sh" --dry-run
+          else
+            "./scripts/$OPERATION.sh"
+          fi
+      - name: Remove ephemeral material
+        if: always()
+        run: |
+          node - <<'NODE'
+          const fs=require('node:fs'),path=require('node:path');
+          fs.rmSync('local',{recursive:true,force:true});
+          fs.rmSync(path.join(process.env.RUNNER_TEMP,'dayoff-clasp.json'),{force:true});
+          NODE

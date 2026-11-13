@@ -6,7 +6,8 @@
     "strict": true,
     "noEmit": true,
     "types": ["node", "google-apps-script"],
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "allowImportingTsExtensions": true
   },
   "include": ["src/**/*.ts", "tests/**/*.ts", "scripts/**/*.ts"]
 }

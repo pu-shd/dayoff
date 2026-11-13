@@ -1,0 +1,19 @@
+services:
+  instance-checks:
+    network_mode: none
+    build:
+      context: ./local/app
+      dockerfile: ../../Dockerfile
+    volumes:
+      - .:/instance:ro
+  source-checks:
+    network_mode: none
+    build:
+      context: ./local/app
+      dockerfile: Dockerfile.importer
+    volumes:
+      - .:/instance:ro
+    command:
+      - sh
+      - -c
+      - uv run --frozen ruff check /instance/scripts/check_sources.py && uv run --frozen ruff format --check /instance/scripts/check_sources.py && uv run --frozen mypy /instance/scripts/check_sources.py && uv run --frozen python /instance/scripts/check_sources.py
