@@ -336,6 +336,7 @@ test("opening an older reminder highlights review without confirming anything", 
   const h = harness([r], { id: r.id, version: "1" });
   await h.tick();
   assert.match(h.get("focus-notice").textContent!, /earlier revision/);
+  assert.equal(h.get("calm-section").hasAttribute("open"), true);
   assert.equal(h.calls.filter((c) => c.name === "confirmCalm").length, 0);
 });
 
@@ -870,4 +871,19 @@ test("the HR system name is configurable throughout the visible interface and pr
   );
   assert.match(h.get("preview-body").textContent!, /Example HR Ledger/);
   assert.doesNotMatch(h.document.body.textContent!, /CALM/);
+});
+
+test("HR checklist and record start collapsed and preserve disclosure choices across refreshes", async () => {
+  const h = harness();
+  await h.tick();
+  for (const id of ["calm-section", "record-section"]) {
+    assert.equal(h.get(id).tagName, "DETAILS");
+    assert.equal(h.get(id).hasAttribute("open"), false);
+    assert.ok(h.get(id).querySelector("summary"));
+    h.get(id).setAttribute("open", "");
+  }
+  h.get("install").click();
+  await h.tick();
+  assert.equal(h.get("calm-section").hasAttribute("open"), true);
+  assert.equal(h.get("record-section").hasAttribute("open"), true);
 });

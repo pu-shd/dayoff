@@ -143,17 +143,23 @@
       summary {
         cursor: pointer;
       }
-      .history-panel > summary {
+      .disclosure-panel > summary {
         margin-left: 16px;
         padding-left: 3px;
         font-size: 20px;
         font-weight: 600;
       }
-      .history-panel > summary .badge {
+      .disclosure-panel > summary h2 {
+        display: inline;
+        margin: 0;
+        font: inherit;
+        letter-spacing: inherit;
+      }
+      .disclosure-panel > summary .badge {
         float: right;
         font-weight: 400;
       }
-      .history-panel[open] > summary {
+      .disclosure-panel[open] > summary {
         margin-bottom: 20px;
       }
       .record-dates > summary {
@@ -526,10 +532,10 @@
         .card details {
           font-size: 11px;
         }
-        .history-panel > summary {
+        .disclosure-panel > summary {
           font-size: 18px;
         }
-        .history-panel > summary .badge {
+        .disclosure-panel > summary .badge {
           float: none;
           display: inline-block;
           margin-left: 6px;
@@ -790,17 +796,14 @@
             </div>
           </section>
         </section>
-        <section class="panel" id="calm-section">
-          <div class="heading">
-            <div>
-              <p class="eyebrow">Finish the official record</p>
-              <h2>
-                <span data-hr-name>HR accounting system</span> checklist &amp;
-                reminders
-              </h2>
-            </div>
-            <span id="calm-count" class="badge">0 outstanding</span>
-          </div>
+        <details class="panel disclosure-panel" id="calm-section">
+          <summary>
+            <h2>
+              <span data-hr-name>HR accounting system</span> checklist &amp;
+              reminders <span id="calm-count" class="badge">0 outstanding</span>
+            </h2>
+          </summary>
+          <p class="eyebrow">Finish the official record</p>
           <p class="section-note muted">
             Enter the dates, leave type, and hours in
             <span data-hr-name>HR accounting system</span>, then confirm below.
@@ -851,9 +854,9 @@
               </button>
             </details>
           </div>
-        </section>
-        <section class="panel">
-          <h2>Your record</h2>
+        </details>
+        <details class="panel disclosure-panel" id="record-section">
+          <summary><h2>Your record</h2></summary>
           <p id="record-note" class="muted"></p>
           <div class="table-wrap">
             <table>
@@ -877,8 +880,8 @@
               >Open private ledger</a
             >
           </div>
-        </section>
-        <details class="panel history-panel hide" id="history-section">
+        </details>
+        <details class="panel disclosure-panel hide" id="history-section">
           <summary>
             Attendance history <span class="badge" id="history-count"></span>
           </summary>
@@ -951,7 +954,7 @@
     <script>
       'use strict';
       const focus = <?!= focus ?>;
-      let state, pendingInput, historyYear, historyKey, historyLoad = 0, working = false, hasError = false, savedPreview = false, lookupTimer, lookupGeneration = 0, lookupKey = '', lookupPending = false;
+      let state, pendingInput, historyYear, historyKey, historyLoad = 0, working = false, hasError = false, savedPreview = false, lookupTimer, lookupGeneration = 0, lookupKey = '', lookupPending = false, focusRevealed = false;
       const $ = id => document.getElementById(id);
       const hrName=()=>state?.config.hrSystemName??'HR accounting system';
       const money = n => (n / 100).toFixed(2);
@@ -971,14 +974,14 @@
        if(trigger.id==='send')return ()=>$('request-save-status');
        if(trigger.id==='initialize')return ()=>feedbackAfter($('cards'));
        const record=trigger.closest('[data-record-id]'),day=trigger.closest('[data-date]');
-       if(record){const id=record.dataset.recordId,date=day?.dataset.date,section=record.closest('section');return ()=>{const row=$('record-'+id),target=date?[...row?.querySelectorAll('[data-date]')??[]].find(n=>n.dataset.date===date):row;return feedbackIn(target?.lastElementChild||section);};}
+       if(record){const id=record.dataset.recordId,date=day?.dataset.date,section=record.closest('.panel');return ()=>{const row=$('record-'+id),target=date?[...row?.querySelectorAll('[data-date]')??[]].find(n=>n.dataset.date===date):row;return feedbackIn(target?.lastElementChild||section);};}
        const item=trigger.closest('.queue-item');
        if(item){const id=item.id,index=[...$('calm-queue').querySelectorAll('.queue-item')].indexOf(item);return ()=>{const current=$(id);if(current)return feedbackAfter(current.querySelector('.actions'));const queue=$('calm-queue'),node=newFeedback();queue.insertBefore(node,queue.children[index]||null);return node;};}
-       const anchor=trigger.closest('.actions')||trigger.closest('label')||trigger,section=trigger.closest('section,#setup,#history-section')||document.querySelector('main');
+       const anchor=trigger.closest('.actions')||trigger.closest('label')||trigger,section=trigger.closest('.panel,#setup')||document.querySelector('main');
        return ()=>anchor.isConnected?feedbackAfter(anchor):feedbackIn(section);
       }
       function clearFeedback(feedback) {const node=feedback();node.textContent='';node.classList.add('hide');}
-      function notify(feedback,value,error=false) {const node=feedback();message('',error);node.textContent=value;node.className='status'+(error?' error':'');node.closest('details')?.setAttribute('open','');node.scrollIntoView?.({block:'nearest',inline:'nearest'});}
+      function notify(feedback,value,error=false) {const node=feedback();message('',error);node.textContent=value;node.className='status'+(error?' error':'');for(let parent=node.parentElement;parent;parent=parent.parentElement)if(parent.tagName==='DETAILS')parent.setAttribute('open','');node.scrollIntoView?.({block:'nearest',inline:'nearest'});}
       function enabled() {
        document.querySelectorAll('button').forEach(b=>b.disabled=working);
        $('email-choice').disabled=working||savedPreview;
@@ -1107,6 +1110,7 @@
        }
        $('focus-notice').classList.add('hide');
        if(focus.id){
+        if(!focusRevealed){$('calm-section').setAttribute('open','');focusRevealed=true;}
         const r=s.records.find(r=>r.id===focus.id);$('focus-notice').classList.remove('hide');
         $('focus-notice').textContent=!r?'This reminder refers to a request that is not in this ledger.':!outstanding(r)?`This request has no outstanding ${hrName()} action.`:String(r.version)!==String(focus.version)?'This reminder refers to an earlier revision. Review the latest dates and hours below before confirming.':`Review the highlighted request, update ${hrName()}, then confirm below.`;
        }
