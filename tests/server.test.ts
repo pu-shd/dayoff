@@ -8,7 +8,10 @@ import { historyFixture } from "./history-fixture.js";
 import type { HistoryArchive } from "../src/history.js";
 import type { Config, RecordEntry } from "../src/domain.js";
 type Handlers = typeof import("../src/server.js").handlers;
-const cfg = JSON.parse(readFileSync("config/example.json", "utf8")) as Config;
+const cfg = {
+  ...JSON.parse(readFileSync("config/example.json", "utf8")),
+  hrSystemName: "CALM",
+} as Config;
 function harness(
   delivery: Config["delivery"] = "google",
   seed: RecordEntry[] = [],
@@ -17,6 +20,7 @@ function harness(
     anchorFiscalYear: 2027,
     years: [],
   },
+  settings: Partial<Config> = {},
 ) {
   const rows: unknown[][] = [],
     properties = new Map<string, string>(),
@@ -77,7 +81,7 @@ function harness(
     globalName: "Dayoff",
     write: false,
     define: {
-      DAYOFF_CONFIG: JSON.stringify({ ...cfg, delivery }),
+      DAYOFF_CONFIG: JSON.stringify({ ...cfg, ...settings, delivery }),
       DAYOFF_SEED: JSON.stringify({ records: seed }),
       DAYOFF_HISTORY: JSON.stringify(history),
     },
@@ -864,4 +868,22 @@ test("invalid lookup ranges and provider failures stay read-only and return safe
   );
   assert.deepEqual(h.calendarWrites, []);
   assert.equal(h.rows.length, 0);
+});
+
+test("configured HR names apply to request emails, reminders, Calendar notes and exports", () => {
+  const h = harness("google", [], undefined, { hrSystemName: "Timekeeping" });
+  let s = h.init();
+  s = h.api.createRequest(s.nonce, {
+    id: "request-hr-label",
+    category: "vacation",
+    mode: "full",
+    first: "2026-11-16",
+    last: "2026-11-16",
+  });
+  assert.match(h.mails[0].body, /Timekeeping/);
+  assert.match([...h.events.values()][0].description!, /Timekeeping: Pending/);
+  h.api.sendReminderNow(s.nonce);
+  assert.match(h.mails[1].subject, /^Timekeeping:/);
+  assert.match(h.mails[1].body, /Timekeeping/);
+  assert.match(h.api.exportReport().split("\r\n")[0], /Timekeeping/);
 });

@@ -264,6 +264,7 @@
         margin-top: 18px;
       }
       .status {
+        scroll-margin-block: 14px;
         padding: 14px 18px;
         border-radius: 9px;
         background: #eee2d0;
@@ -600,7 +601,8 @@
           <h1>Day Off</h1>
           <p id="tagline">A individual ledger for tracking time.</p>
           <p id="subtitle" class="muted">
-            Your leave, calendar, and CALM checklist.
+            Your leave, calendar, and
+            <span data-hr-name>HR accounting system</span> checklist.
           </p>
         </div>
         <span id="mode" class="badge" role="status" aria-live="polite"
@@ -737,10 +739,13 @@
                   <p id="preview-calendar"></p>
                 </div>
                 <div class="summary-box">
-                  <h3>CALM checklist</h3>
+                  <h3>
+                    <span data-hr-name>HR accounting system</span> checklist
+                  </h3>
                   <p>
-                    This request will need entry in CALM. Email reminders can
-                    continue until you confirm it is entered.
+                    This request will need entry in
+                    <span data-hr-name>HR accounting system</span>. Email
+                    reminders can continue until you confirm it is entered.
                   </p>
                 </div>
               </div>
@@ -789,18 +794,23 @@
           <div class="heading">
             <div>
               <p class="eyebrow">Finish the official record</p>
-              <h2>CALM checklist &amp; reminders</h2>
+              <h2>
+                <span data-hr-name>HR accounting system</span> checklist &amp;
+                reminders
+              </h2>
             </div>
             <span id="calm-count" class="badge">0 outstanding</span>
           </div>
           <p class="section-note muted">
-            Enter the dates, leave type, and hours in CALM, then confirm below.
+            Enter the dates, leave type, and hours in
+            <span data-hr-name>HR accounting system</span>, then confirm below.
             Corrections remain here until you confirm they are complete.
           </p>
           <div id="focus-notice" class="status hide"></div>
           <div id="calm-queue" class="queue"></div>
           <div id="calm-empty" class="empty hide">
-            You’re caught up. There are no outstanding CALM entries or
+            You’re caught up. There are no outstanding
+            <span data-hr-name>HR accounting system</span> entries or
             corrections.
           </div>
           <div class="settings">
@@ -821,7 +831,7 @@
               One digest goes to <strong id="reminder-recipient"></strong>,
               Monday–Friday, until everything is confirmed. Google schedules
               delivery within the selected hour. Request-email choices do not
-              affect CALM reminders.
+              affect <span data-hr-name>HR accounting system</span> reminders.
             </p>
             <div class="actions">
               <button id="install">Enable weekday reminders</button
@@ -910,8 +920,9 @@
             <details class="quiet-details">
               <summary id="history-daily-count">Daily source markings</summary>
               <p class="muted">
-                Markings are transcribed as written. Daily hours and CALM entry
-                are not inferred.
+                Markings are transcribed as written. Daily hours and
+                <span data-hr-name>HR accounting system</span> entry are not
+                inferred.
               </p>
               <div class="table-wrap">
                 <table>
@@ -932,8 +943,9 @@
         </details>
       </div>
       <footer>
-        CALM remains the official record. These are your personal calculations.
-        Imported monthly totals do not imply CALM verification.
+        <span data-hr-name>HR accounting system</span> remains the official
+        record. These are your personal calculations. Imported monthly totals do
+        not imply <span data-hr-name>HR accounting system</span> verification.
       </footer>
     </main>
     <script>
@@ -941,6 +953,7 @@
       const focus = <?!= focus ?>;
       let state, pendingInput, historyYear, historyKey, historyLoad = 0, working = false, hasError = false, savedPreview = false, lookupTimer, lookupGeneration = 0, lookupKey = '', lookupPending = false;
       const $ = id => document.getElementById(id);
+      const hrName=()=>state?.config.hrSystemName??'HR accounting system';
       const money = n => (n / 100).toFixed(2);
       const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
       const date = s => new Intl.DateTimeFormat('en-US', {weekday:'long',month:'long',day:'numeric',year:'numeric',timeZone:'UTC'}).format(new Date(s+'T12:00:00Z'));
@@ -997,7 +1010,7 @@
       function range(r) {return dateList(activeDays(r).length?activeDays(r):r.days);}
       function confirmEntry(r,trigger) {
        const correction=r.calm==='correction';
-       if(confirm((correction?'Have you corrected the cancelled leave':'Have you entered this leave')+' in CALM?\n\n'+dateList(calmDays(r))+'\n'+cap(r.input.category)+' · '+money(calmDays(r).reduce((n,d)=>n+d.hours,0))+' hours'))
+       if(confirm((correction?'Have you corrected the cancelled leave':'Have you entered this leave')+` in ${hrName()}?\n\n`+dateList(calmDays(r))+'\n'+cap(r.input.category)+' · '+money(calmDays(r).reduce((n,d)=>n+d.hours,0))+' hours'))
         action('confirmCalm',trigger,r.id,r.version);
       }
       function renderPreview(r) {
@@ -1017,7 +1030,7 @@
        $('preview-body').textContent=r.message.body;
        $('preview-reference').textContent=r.id;
        $('email-draft').classList.toggle('hide',choice==='none');
-       $('email-explanation').textContent=choice==='self'?'A copy goes only to you. Resend or forward it to management when ready.':choice==='management'?'This request goes directly to your configured management recipients.':'No request email will be sent. The leave record, Calendar entry, and CALM checklist will still be created.';
+       $('email-explanation').textContent=choice==='self'?'A copy goes only to you. Resend or forward it to management when ready.':choice==='management'?'This request goes directly to your configured management recipients.':`No request email will be sent. The leave record, Calendar entry, and ${hrName()} checklist will still be created.`;
        $('send').textContent=choice==='self'?'Save request & email me':choice==='management'?'Save request & email management':'Save request without email';
        $('send').classList.toggle('hide',state.config.delivery==='disabled');
        $('preview-save-note').textContent=state.config.delivery==='disabled'?'Preview mode is enabled. This request cannot be saved or sent yet.':'Saving records these hours and creates the real Staff Calendar entry.';
@@ -1069,6 +1082,7 @@
       }
       function render(s) {
        state=s;
+       document.querySelectorAll('[data-hr-name]').forEach(node=>node.textContent=hrName());
        renderMode();
        $('subtitle').textContent=s.config.displayName+' · FY'+s.config.fiscalYear+' · balances as of '+s.today;
        $('setup').classList.toggle('hide',s.initialized);$('content').classList.toggle('hide',!s.initialized);
@@ -1081,20 +1095,20 @@
        $('holiday-details').classList.toggle('hide',!holidays.length);$('holiday-dates').textContent=holidays.join(' · ');
        for(const row of dateRows())validateDateRow(row);
        $('full').textContent=money(s.config.policy.fullDay);$('half').textContent=money(s.config.policy.halfDay);$('ledger').href=s.ledgerUrl;
-       $('record-note').textContent='Imported monthly totals are assigned to month-end, so balances within an imported month are approximate. Avoid re-entering leave already included in those totals. Dates submitted together share one request email and CALM confirmation; individual dates can be removed below.';
+       $('record-note').textContent=`Imported monthly totals are assigned to month-end, so balances within an imported month are approximate. Avoid re-entering leave already included in those totals. Dates submitted together share one request email and ${hrName()} confirmation; individual dates can be removed below.`;
        const queue=s.records.filter(outstanding);$('calm-count').textContent=queue.length+' outstanding';$('calm-queue').replaceChildren();$('calm-empty').classList.toggle('hide',queue.length!==0);
        for(const r of queue.sort((a,b)=>a.days[0].date.localeCompare(b.days[0].date))){
         const days=calmDays(r);
         const item=text('article','','queue-item'+(r.calm==='correction'?' correction':''));item.id='calm-'+r.id;item.setAttribute('data-category',r.input.category);
         const top=text('div','','queue-top');top.append(text('h3',cap(r.input.category)+' · '+money(days.reduce((n,d)=>n+d.hours,0))+' hours'),text('span',r.calm==='correction'?'Correction needed':'Entry needed','badge'));
         item.append(top,text('p',dateList(days)),text('p',days.map(d=>d.date+' · '+money(d.hours)+' h').join(' / '),'muted'));
-        const controls=text('div','','actions');controls.append(button(r.calm==='correction'?'Confirm CALM corrected':'Confirm entered in CALM',event=>confirmEntry(r,event.currentTarget)));item.append(controls);$('calm-queue').append(item);
+        const controls=text('div','','actions');controls.append(button(r.calm==='correction'?`Confirm ${hrName()} corrected`:`Confirm entered in ${hrName()}`,event=>confirmEntry(r,event.currentTarget)));item.append(controls);$('calm-queue').append(item);
         if(focus.id===r.id)item.classList.add('focus');
        }
        $('focus-notice').classList.add('hide');
        if(focus.id){
         const r=s.records.find(r=>r.id===focus.id);$('focus-notice').classList.remove('hide');
-        $('focus-notice').textContent=!r?'This reminder refers to a request that is not in this ledger.':!outstanding(r)?'This request has no outstanding CALM action.':String(r.version)!==String(focus.version)?'This reminder refers to an earlier revision. Review the latest dates and hours below before confirming.':'Review the highlighted request, update CALM, then confirm below.';
+        $('focus-notice').textContent=!r?'This reminder refers to a request that is not in this ledger.':!outstanding(r)?`This request has no outstanding ${hrName()} action.`:String(r.version)!==String(focus.version)?'This reminder refers to an earlier revision. Review the latest dates and hours below before confirming.':`Review the highlighted request, update ${hrName()}, then confirm below.`;
        }
        $('reminder-hour').replaceChildren();
        for(let h=0;h<24;h++){const option=text('option',String(h).padStart(2,'0')+':00–'+String(h).padStart(2,'0')+':59');option.value=String(h);option.selected=h===s.reminders.hour;$('reminder-hour').append(option);}
@@ -1111,27 +1125,27 @@
          const details=document.createElement('details');details.className='record-dates';details.dataset.requestId=r.id;if(expanded.has(r.id))details.setAttribute('open','');
          details.append(text('summary',remaining.length+' active '+(remaining.length===1?'date':'dates')+(remaining.length<r.days.length?' · '+(r.days.length-remaining.length)+' removed':'')+' · '+dateList(remaining.length?remaining:r.days,d=>d.slice(5).replace('-','/'))));
          const wrap=text('div','','table-wrap'),table=document.createElement('table'),thead=document.createElement('thead'),tr=document.createElement('tr');
-         for(const label of ['Date','Hours','CALM','Actions'])tr.append(text('th',label));thead.append(tr);table.append(thead);
+         for(const label of ['Date','Hours',`${hrName()}`,'Actions'])tr.append(text('th',label));thead.append(tr);table.append(thead);
          const body=document.createElement('tbody');
          for(const d of r.days){
           const removed=r.status==='cancelled' || r.cancelledDates?.includes(d.date),dayRow=document.createElement('tr');dayRow.dataset.date=d.date;dayRow.setAttribute('data-category',r.input.category);
           const calm=removed?(r.calm==='correction' && calmDays(r).some(x=>x.date===d.date)?'correction':'no outstanding action'):r.calm==='correction'?'entered':r.calm;
           dayRow.append(text('td',d.date+(removed?' · removed':'')+(s.config.holidays.includes(d.date)?' · configured holiday':'')),text('td',money(d.hours)),text('td',calm));
           const controls=document.createElement('td');
-          if(!removed)controls.append(button('Remove date',event=>{if(confirm('Remove '+date(d.date)+' ('+money(d.hours)+' hours) from this request? Other dates stay in place. Correct CALM if it was already entered.'))action('removeRequestDate',event.currentTarget,r.id,r.version,d.date);},'danger'));
+          if(!removed)controls.append(button('Remove date',event=>{if(confirm('Remove '+date(d.date)+' ('+money(d.hours)+` hours) from this request? Other dates stay in place. Correct ${hrName()} if it was already entered.`))action('removeRequestDate',event.currentTarget,r.id,r.version,d.date);},'danger'));
           dayRow.append(controls);body.append(dayRow);
          }
          table.append(body);wrap.append(table);details.append(wrap);dateCell.append(details);
         }
         const holidayDates=r.legacy?[]:remaining.filter(d=>s.config.holidays.includes(d.date));if(holidayDates.length)dateCell.append(text('small','Review '+holidayDates.length+' saved holiday date(s); saved charges are unchanged.'));
         row.append(dateCell,text('td',cap(r.input.category)+(r.status==='cancelled'?' · cancelled':'')),text('td',money((r.legacy?r.days:remaining).reduce((sum,d)=>sum+d.hours,0))));
-        row.append(text('td',r.legacy?'Historical; CALM unverified':'CALM: '+r.calm+' · Calendar: '+r.calendar+' · Email: '+r.email));
+        row.append(text('td',r.legacy?`Historical; ${hrName()} unverified`:`${hrName()}: `+r.calm+' · Calendar: '+r.calendar+' · Email: '+r.email));
         const controls=document.createElement('td');
         if(!r.legacy){
-         if(outstanding(r))controls.append(button(r.calm==='correction'?'Confirm CALM corrected':'Confirm request entered in CALM',event=>confirmEntry(r,event.currentTarget)));
+         if(outstanding(r))controls.append(button(r.calm==='correction'?`Confirm ${hrName()} corrected`:`Confirm request entered in ${hrName()}`,event=>confirmEntry(r,event.currentTarget)));
          if(r.calendar==='pending'||r.email==='pending')controls.append(button('Retry incomplete steps',event=>action('retryRequest',event.currentTarget,r.id)));
          if(r.email==='unknown'||r.email==='sending')controls.append(button('Confirm email received',event=>{if(confirm('Confirm receipt or an administrator-verified delivery trace.'))action('resolveEmail',event.currentTarget,r.id,r.version,true);}));
-         if(remaining.length)controls.append(button('Cancel all remaining dates',event=>{if(confirm('Cancel all remaining dates in this request and remove their Calendar events? Any CALM corrections stay on your checklist.'))action('cancelRequest',event.currentTarget,r.id,r.version);},'danger'));
+         if(remaining.length)controls.append(button('Cancel all remaining dates',event=>{if(confirm(`Cancel all remaining dates in this request and remove their Calendar events? Any ${hrName()} corrections stay on your checklist.`))action('cancelRequest',event.currentTarget,r.id,r.version);},'danger'));
         }
         row.append(controls);tbody.append(row);
        }
@@ -1214,7 +1228,7 @@
        if(ok || state.records.some(r=>r.id===id)){
         pendingInput=null;savedPreview=true;$('preview').classList.remove('hide');$('preview-status').textContent=ok?'Saved':'Action needed';$('preview-eyebrow').textContent=ok?'Saved request':'Recorded request';$('send').textContent=ok?'Request saved':'Request recorded';$('preview-save-note').classList.add('hide');enabled();
        }
-       if(ok)notify(feedbackAt(trigger),'Request saved and Calendar updated. '+(state.records.find(r=>r.id===id)?.email==='skipped'?'No request email was sent.':'Your chosen request email was sent.')+' CALM entry remains on your checklist.');
+       if(ok)notify(feedbackAt(trigger),'Request saved and Calendar updated. '+(state.records.find(r=>r.id===id)?.email==='skipped'?'No request email was sent.':'Your chosen request email was sent.')+` ${hrName()} entry remains on your checklist.`);
       });
       $('staff-refresh').addEventListener('click',()=>queueStaffLookup(true));
       $('import-history').addEventListener('click',event=>action('importHistory',event.currentTarget));

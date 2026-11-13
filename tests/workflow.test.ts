@@ -20,6 +20,7 @@ import {
 const cfg = {
   ...JSON.parse(readFileSync("config/example.json", "utf8")),
   delivery: "google",
+  hrSystemName: "CALM",
 } as Config;
 const input: Input = {
   id: "request-1234",

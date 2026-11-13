@@ -10,7 +10,7 @@ Set management recipients through `node scripts/configure.ts --management-email 
 
 1. Preview a calendar or recipient change with `node scripts/configure.ts ... --dry-run`.
 2. Apply it by repeating that command without `--dry-run`.
-3. For schedules, lunch, holidays, allowances, owner identity, or delivery mode, edit the private JSON selected by `DAYOFF_CONFIG`. The dedicated CLI flags currently cover calendar and management recipients.
+3. For schedules, lunch, holidays, allowances, owner identity, or delivery mode, edit the private JSON selected by `DAYOFF_CONFIG`. Dedicated CLI flags cover calendar, management recipients, fiscal start, holiday files, and the HR system name.
 4. Run `./scripts/update.sh --dry-run` to review the deployment operation, then `./scripts/update.sh` to build, validate, push, and update the existing deployment ID.
 5. Refresh the printed canonical web app URL and verify the preview. Configuration changes retain the existing private ledger. Changing the FY on a populated ledger is rejected; use the documented rollover process.
 
@@ -39,9 +39,9 @@ Use Retry incomplete steps for pending Calendar work. Stable IDs prevent duplica
 
 For email unknown or sending, confirm recipient receipt or consult a delivery trace. MailApp need not populate Outlook Sent, so absence there does not prove non-delivery. Resend manually only after establishing non-delivery, then confirm receipt. Never create another request to work around an uncertain send.
 
-CALM confirmation is saved before Calendar notes update. If that update fails, retry the Calendar operation; CALM remains confirmed.
+HR accounting system confirmation is saved before Calendar notes update. If that update fails, retry the Calendar operation; HR accounting system remains confirmed.
 
-A rejected request should be cancelled. Follow the correction reminder if it was already entered in CALM. Dayoff cannot change PeopleSoft itself.
+A rejected request should be cancelled. Follow the correction reminder if it was already entered in HR accounting system. Dayoff cannot change your HR accounting system itself.
 
 Daily reminder deduplication is recorded after successful send acceptance. Process interruption around email delivery can still cause duplicate or missed reminders. The outstanding list remains visible in the app.
 
@@ -71,13 +71,13 @@ Only source and generic examples belong in Git. Keep workbooks, imports, live se
 
 ## Request preview and email choices
 
-The preview presents dates, per-day hours, Calendar titles, and an exact email draft. New requests default to self so the owner can resend the copy to management. Select management to use the configured list or no request email to save silently. CALM reminders remain independent. Retries and cancellation use the stored recipient snapshot.
+The preview presents dates, per-day hours, Calendar titles, and an exact email draft. New requests default to self so the owner can resend the copy to management. Select management to use the configured list or no request email to save silently. HR accounting system reminders remain independent. Retries and cancellation use the stored recipient snapshot.
 
-## CALM reminder controls
+## HR accounting system reminder controls
 
-Use the CALM checklist to review entries and corrections before confirming completion in PeopleSoft. Choose an hour and enable weekday reminders; saving a new schedule replaces the previous trigger. Pause removes reminder triggers. The preferred hour persists privately across CLI deployments and overrides the configuration file’s default. If the configured timezone changes, save the reminder schedule again.
+Use the HR accounting system checklist to review entries and corrections before confirming completion in your HR accounting system. Choose an hour and enable weekday reminders; saving a new schedule replaces the previous trigger. Pause removes reminder triggers. The preferred hour persists privately across CLI deployments and overrides the configuration file’s default. If the configured timezone changes, save the reminder schedule again.
 
-Send today’s reminder now produces the same digest, including all outstanding dates and hours, even when the recurring schedule is paused. Manual sends and scheduled sends share one-attempt-per-local-date protection. A successful result means MailApp accepted the email. If the outcome is uncertain, check the mailbox or delivery trace; another automatic attempt is allowed on a later weekday if CALM remains outstanding.
+Send today’s reminder now produces the same digest, including all outstanding dates and hours, even when the recurring schedule is paused. Manual sends and scheduled sends share one-attempt-per-local-date protection. A successful result means MailApp accepted the email. If the outcome is uncertain, check the mailbox or delivery trace; another automatic attempt is allowed on a later weekday if HR accounting system remains outstanding.
 
 Migration 002 appends email-routing metadata without changing existing hours or balances. It runs on the next authorized write or scheduled reminder, never on GET. Old requests used management routing; their snapshot uses the management addresses configured at upgrade. New requests use self by default. No mail is sent by the migration.
 
@@ -89,11 +89,11 @@ Open the canonical app URL, refresh, expand **Attendance history**, and use **Im
 
 The `History` tab stores complete source-year snapshots in append-only rows. Do not manually edit it. Copy the private Sheet or retain the original workbooks and private archive for backup. Revised sources require rerunning the importer, redeploying, and choosing Import again; old revisions are preserved. Imports do not delete years missing from a subsequent folder. To remove history or replace active-year ledger entries, use an explicitly reviewed migration.
 
-After importing, removing `DAYOFF_HISTORY` from configuration can reduce future bundle size without deleting saved history. The last imported anchor remains stored privately when the bundled source is removed. History exports contain source monthly usage and balances, not current live balances. Use the existing current-year balance export for management reconciliation against CALM.
+After importing, removing `DAYOFF_HISTORY` from configuration can reduce future bundle size without deleting saved history. The last imported anchor remains stored privately when the bundled source is removed. History exports contain source monthly usage and balances, not current live balances. Use the existing current-year balance export for management reconciliation against HR accounting system.
 
 ## Grouped dates and Calendar ownership
 
-Use Add dates to create noncontiguous ranges in one request. Each range can be full, half, or partial, while category and recipient choice remain shared. Expand a request in Your record to see its calculated dates and individual Remove date controls. The saved request retains every calculated date; removing one restores only its hours. Entered CALM dates require explicit correction confirmation after removal. Remaining dates preserve their entered status.
+Use Add dates to create noncontiguous ranges in one request. Each range can be full, half, or partial, while category and recipient choice remain shared. Expand a request in Your record to see its calculated dates and individual Remove date controls. The saved request retains every calculated date; removing one restores only its hours. Entered HR accounting system dates require explicit correction confirmation after removal. Remaining dates preserve their entered status.
 
 Migration 005 appends per-date cancellation defaults on the next authenticated write or reminder. It changes no original dates or charges and never tags Calendar events. New Calendar events carry the Apps Script project ID, request ID and date; updates and deletes require matching tags and conditional event versions. An event with missing or mismatched ownership tags is left untouched. A failed Calendar read does not authorize event creation or deletion. Resolve the conflict before retrying pending steps.
 
@@ -106,3 +106,7 @@ Set holidays with `node scripts/configure.ts --holidays-file PATH` (also accepte
 The native date picker allows date selection, while row validation rejects ranges with no working days. The form states the active holiday count or explicitly says none are configured. Newly configured holidays do not rewrite saved charges; review flagged active requests and remove incorrect dates through the app. The original monthly import remains the balance anchor.
 
 Staff Calendar lookup starts after date entry pauses. It uses one bounded Calendar list request with recurring events expanded and a two-minute private Script Cache. Refresh bypasses that cache. Calendar mutation invalidates subsequent lookup keys. Preview and Save do not await availability results. No Calendar event data is logged or persisted to the attendance ledger.
+
+## HR system display name
+
+Use `node scripts/configure.ts --hr-system-name 'Timekeeping'`, or the same flag in bootstrap. It changes the private `hrSystemName` field while retaining other settings. Omit the field for the generic default, HR accounting system. Names must be nonempty single-line text of at most 80 characters. Deploy with the usual update command and update the private configuration secret when using GitOps. This changes display and message wording only; saved record keys, events' ownership tags, and installed trigger handlers remain compatible.

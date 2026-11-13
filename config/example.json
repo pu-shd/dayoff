@@ -33,5 +33,6 @@
       "lunchStart": "12:00"
     }
   ],
-  "holidays": []
+  "holidays": [],
+  "hrSystemName": "HR accounting system"
 }

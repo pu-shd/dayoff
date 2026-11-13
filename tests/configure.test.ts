@@ -192,3 +192,24 @@ test("holiday files replace the private dates and support safe repeatable dry ru
     assert.equal(readFileSync(file, "utf8"), before);
   }
 });
+
+test("HR system display names can be configured without changing attendance settings", () => {
+  const dir = mkdtempSync(join(tmpdir(), "dayoff-hr-name-")),
+    file = join(dir, "config.json");
+  writeFileSync(file, JSON.stringify(example));
+  assert.equal(
+    run(["--config", file, "--hr-system-name", "Example HR Ledger"], dir)
+      .status,
+    0,
+  );
+  assert.deepEqual(JSON.parse(readFileSync(file, "utf8")), {
+    ...example,
+    hrSystemName: "Example HR Ledger",
+  });
+  const saved = readFileSync(file, "utf8");
+  assert.notEqual(
+    run(["--config", file, "--hr-system-name", "invalid\nname"], dir).status,
+    0,
+  );
+  assert.equal(readFileSync(file, "utf8"), saved);
+});

@@ -1,5 +1,6 @@
 import {
   validateConfig,
+  hrSystemName,
   fiscalBounds,
   report,
   hoursText,
@@ -329,7 +330,7 @@ function calendar(c: Config, r: RecordEntry): void {
       description:
         "Hours: " +
         hoursText(d.hours) +
-        "\nCALM: " +
+        ("\n" + hrSystemName(c) + ": ") +
         (r.calm === "entered" || r.calm === "correction"
           ? "Entered"
           : "Pending") +
@@ -588,8 +589,8 @@ function removeRequestDate(
 function confirmCalm(token: string, id: string, version: number) {
   return safe(() =>
     guard(token, (c) => {
-      const r = markCalm(ports(c), id, version);
-      // Calendar synchronization is retryable; CALM confirmation remains saved if it fails.
+      const r = markCalm(ports(c), id, version, hrSystemName(c));
+      // Calendar synchronization is retryable; HR confirmation remains saved if it fails.
       if (c.delivery === "google") sync(c, ports(c), r);
       return dashboard(c);
     }),
@@ -725,12 +726,12 @@ function sendDigest(c: Config) {
   if (!pending.length)
     return {
       sent: false,
-      notice: "No outstanding CALM entries or corrections.",
+      notice: "No outstanding " + hrSystemName(c) + " entries or corrections.",
     };
   if (props().getProperty("LAST_REMINDER") === today)
     return {
       sent: false,
-      notice: "A CALM reminder has already been sent today.",
+      notice: "A " + hrSystemName(c) + " reminder has already been sent today.",
     };
   invariant(
     props().getProperty("REMINDER_ATTEMPT_DATE") !== today,
@@ -766,12 +767,15 @@ function sendDigest(c: Config) {
     MailApp.sendEmail({
       to: c.ownerEmail,
       subject:
-        "CALM: " +
+        hrSystemName(c) +
+        ": " +
         pending.length +
         " outstanding " +
         (pending.length === 1 ? "request" : "requests"),
       body:
-        "Update these records in CALM, then open each link and confirm in Dayoff. Opening a link does not mark anything entered.\n\n" +
+        "Update these records in " +
+        hrSystemName(c) +
+        ", then open each link and confirm in Dayoff. Opening a link does not mark anything entered.\n\n" +
         lines.join("\n\n"),
     });
   } catch {
@@ -785,7 +789,10 @@ function sendDigest(c: Config) {
     LAST_REMINDER_AT: new Date().toISOString(),
     REMINDER_ATTEMPT_STATE: "accepted",
   });
-  return { sent: true, notice: "CALM reminder sent to your email address." };
+  return {
+    sent: true,
+    notice: hrSystemName(c) + " reminder sent to your email address.",
+  };
 }
 function sendReminderNow(token: string) {
   return safe(() =>
@@ -810,9 +817,17 @@ function sendCalmReminders() {
 }
 function exportReport() {
   return safe(() => {
-    actor();
+    const c = actor();
     const rows = [
-      ["request", "status", "date", "category", "hours", "CALM", "source"],
+      [
+        "request",
+        "status",
+        "date",
+        "category",
+        "hours",
+        hrSystemName(c),
+        "source",
+      ],
     ];
     for (const r of list())
       for (const d of r.days)

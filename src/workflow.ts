@@ -1,5 +1,7 @@
 import {
   createDays,
+  hrSystemName,
+  DEFAULT_HR_SYSTEM_NAME,
   activeDays,
   hoursText,
   invariant,
@@ -204,21 +206,26 @@ function deliveryMessage(
         : "") +
       "\n\nThe Staff Calendar has been updated. " +
       (r.calm === "correction"
-        ? "I will correct the removed dates in CALM."
+        ? "I will correct the removed dates in " + hrSystemName(c) + "."
         : remaining.length
-          ? "I’ll enter the remaining dates into CALM."
-          : "No CALM correction is needed."),
+          ? "I’ll enter the remaining dates into " + hrSystemName(c) + "."
+          : "No " + hrSystemName(c) + " correction is needed."),
   };
 }
-export function markCalm(p: Ports, id: string, version: number): RecordEntry {
+export function markCalm(
+  p: Ports,
+  id: string,
+  version: number,
+  systemName = DEFAULT_HR_SYSTEM_NAME,
+): RecordEntry {
   const r = p.list().find((x) => x.id === id);
   invariant(
     r && pendingCalm(r),
-    "No outstanding CALM action for this request.",
+    "No outstanding " + systemName + " action for this request.",
   );
   invariant(
     r.version === version,
-    "The request changed. Refresh before confirming CALM.",
+    "The request changed. Refresh before confirming " + systemName + ".",
   );
   r.calm = "entered";
   r.calmCorrectionDates = [];

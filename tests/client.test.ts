@@ -21,6 +21,7 @@ import {
 const cfg = {
   ...JSON.parse(readFileSync("config/example.json", "utf8")),
   delivery: "google",
+  hrSystemName: "CALM",
 } as Config;
 const html = readFileSync("src/Index.html", "utf8");
 function record(input: Input): RecordEntry {
@@ -130,8 +131,11 @@ function harness(
       const r = record(args[0] as Input);
       return {
         ...r,
-        message: managementMessage(cfg, r),
-        calendarPreview: r.days.map((d) => ({ ...d, title: title(cfg, d) })),
+        message: managementMessage(state.config, r),
+        calendarPreview: r.days.map((d) => ({
+          ...d,
+          title: title(state.config, d),
+        })),
       };
     }
     if (name === "removeRequestDate") {
@@ -849,4 +853,21 @@ test("late Calendar responses cannot replace the context for newly selected date
   await h.tick();
   assert.match(h.get("staff-results").textContent!, /Current context/);
   assert.doesNotMatch(h.get("staff-results").textContent!, /Old context/);
+});
+
+test("the HR system name is configurable throughout the visible interface and preview", async () => {
+  const config = { ...cfg, hrSystemName: "Example HR Ledger" };
+  const h = harness([], undefined, undefined, config);
+  await h.tick();
+  await h.preview();
+  assert.match(
+    h.get("calm-section").querySelector("h2")!.textContent!,
+    /Example HR Ledger/,
+  );
+  assert.match(
+    h.document.querySelector("footer")!.textContent!,
+    /Example HR Ledger/,
+  );
+  assert.match(h.get("preview-body").textContent!, /Example HR Ledger/);
+  assert.doesNotMatch(h.document.body.textContent!, /CALM/);
 });

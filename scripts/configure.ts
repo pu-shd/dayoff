@@ -8,10 +8,11 @@ async function main() {
     path: string | undefined,
     dry = false;
   const recipients: string[] = [];
+  let hrName: string | undefined;
   let fiscalStart: string | undefined, holidayFile: string | undefined;
   if (args.includes("--help")) {
     console.log(
-      "Usage: node scripts/configure.ts [--calendar-id ID] [--management-email ADDRESS ...] [--fiscal-year-start MM-DD] [--holidays-file JSON_PATH] [--config PATH] [--dry-run]",
+      "Usage: node scripts/configure.ts [--calendar-id ID] [--management-email ADDRESS ...] [--fiscal-year-start MM-DD] [--hr-system-name NAME] [--holidays-file JSON_PATH] [--config PATH] [--dry-run]",
     );
     return;
   }
@@ -25,6 +26,7 @@ async function main() {
       flag !== "--calendar-id" &&
       flag !== "--management-email" &&
       flag !== "--fiscal-year-start" &&
+      flag !== "--hr-system-name" &&
       flag !== "--holidays-file" &&
       flag !== "--config"
     )
@@ -38,6 +40,9 @@ async function main() {
     } else if (flag === "--fiscal-year-start") {
       if (fiscalStart) throw Error("Supply one fiscal-year start.");
       fiscalStart = value;
+    } else if (flag === "--hr-system-name") {
+      if (hrName !== undefined) throw Error("Supply one HR system name.");
+      hrName = value;
     } else if (flag === "--holidays-file") {
       if (holidayFile) throw Error("Supply one holiday file.");
       holidayFile = value;
@@ -61,9 +66,15 @@ async function main() {
         fiscalStart)
   )
     throw Error("Supply a valid annual fiscal-year start in MM-DD format.");
-  if (!calendar && !recipients.length && !fiscalStart && !holidayFile)
+  if (
+    !calendar &&
+    !recipients.length &&
+    !fiscalStart &&
+    !holidayFile &&
+    !hrName
+  )
     throw Error(
-      "Supply --calendar-id, --management-email, --fiscal-year-start, or --holidays-file.",
+      "Supply --calendar-id, --management-email, --fiscal-year-start, --holidays-file, or --hr-system-name.",
     );
   if (
     recipients.some(
@@ -76,6 +87,11 @@ async function main() {
     recipients.length
   )
     throw Error("Supply each management email address once.");
+  if (
+    hrName !== undefined &&
+    (!hrName.trim() || hrName.length > 80 || /[\r\n<>]/.test(hrName))
+  )
+    throw Error("Supply a valid HR system display name.");
   const vars: Record<string, string> = {};
   if (existsSync(".env"))
     for (const line of (await readFile(".env", "utf8")).split(/\r?\n/)) {
@@ -96,6 +112,7 @@ async function main() {
     throw Error("Configuration must be a JSON object.");
   const updated = {
     ...data,
+    ...(hrName !== undefined ? { hrSystemName: hrName.trim() } : {}),
     ...(fiscalStart ? { fiscalYearStart: fiscalStart } : {}),
     ...(calendar ? { calendarId: calendar } : {}),
     ...(recipients.length ? { managementEmails: recipients } : {}),

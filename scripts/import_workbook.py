@@ -71,7 +71,7 @@ def convert(cells: dict[str, str], year: int) -> dict:
     }
     records: list[dict] = []
     warnings = [
-        "Imported monthly totals use month-end dates; daily hours and CALM status cannot be inferred. Check existing future bookings before creating new requests."
+        "Imported monthly totals use month-end dates; daily hours and HR entry status cannot be inferred. Check existing future bookings before creating new requests."
     ]
     header = cells.get("AK1", "")
     if header != str(year):

@@ -8,6 +8,7 @@ export interface Schedule {
   lunchStart: string;
 }
 export interface Config {
+  hrSystemName?: string;
   fiscalYear: number;
   fiscalYearStart?: string;
   timeZone: string;
@@ -74,6 +75,10 @@ export interface RecordEntry {
   calmCorrectionDates?: string[];
   lastRemovedDates?: string[];
 }
+export const DEFAULT_HR_SYSTEM_NAME = "HR accounting system";
+export function hrSystemName(c: Pick<Config, "hrSystemName">): string {
+  return c.hrSystemName ?? DEFAULT_HR_SYSTEM_NAME;
+}
 export function invariant(ok: unknown, message: string): asserts ok {
   if (!ok) throw new Error(message);
 }
@@ -118,6 +123,14 @@ export function validateConfig(c: Config): Config {
       c.fiscalYear >= 2000 &&
       c.fiscalYear <= 2200,
     "Invalid fiscal year.",
+  );
+  invariant(
+    c.hrSystemName === undefined ||
+      (typeof c.hrSystemName === "string" &&
+        c.hrSystemName.trim().length > 0 &&
+        c.hrSystemName.length <= 80 &&
+        !/[\r\n<>]/.test(c.hrSystemName)),
+    "Configure a valid HR system display name.",
   );
   const fiscal = fiscalBounds(c);
   try {
@@ -414,8 +427,8 @@ export function managementMessage(
       hoursText(days.reduce((sum, d) => sum + d.hours, 0)) +
       " hours). I put it on the Staff Calendar. " +
       (r.calm === "entered"
-        ? "I entered it into CALM."
-        : "I’ll enter it into CALM.") +
+        ? "I entered it into " + hrSystemName(c) + "."
+        : "I’ll enter it into " + hrSystemName(c) + ".") +
       "\n\n" +
       days
         .map(

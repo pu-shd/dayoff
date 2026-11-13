@@ -13,7 +13,10 @@ import {
   type Config,
   type RecordEntry,
 } from "../src/domain.js";
-const cfg = JSON.parse(readFileSync("config/example.json", "utf8")) as Config;
+const cfg = {
+  ...JSON.parse(readFileSync("config/example.json", "utf8")),
+  hrSystemName: "CALM",
+} as Config;
 function record(first = "2026-11-16"): RecordEntry {
   const input = {
     id: "request-1234",
@@ -265,4 +268,22 @@ test("range rows validate their own mode and dates, reject duplicates and cap ro
     days.map((d) => d.hours),
     [725, 225],
   );
+});
+
+test("HR system names default generically, support an override, and reject unsafe labels", () => {
+  const generic = { ...cfg, hrSystemName: undefined };
+  assert.match(
+    managementMessage(generic, record()).body,
+    /HR accounting system/,
+  );
+  assert.doesNotMatch(managementMessage(generic, record()).body, /CALM/);
+  assert.match(
+    managementMessage({ ...cfg, hrSystemName: "Timekeeping" }, record()).body,
+    /Timekeeping/,
+  );
+  for (const hrSystemName of ["", "bad\nname", "<script>"])
+    assert.throws(
+      () => validateConfig({ ...cfg, hrSystemName }),
+      /HR system display name/,
+    );
 });

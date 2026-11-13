@@ -6,7 +6,7 @@ dry_run=false
 for arg in "$@"; do
  case "$arg" in
   --dry-run) dry_run=true ;;
-  --help) print "Usage: ./scripts/bootstrap-local.sh [--calendar-id ID] [--management-email ADDRESS ...] [--fiscal-year-start MM-DD] [--holidays-file JSON_PATH] [--dry-run]"; exit 0 ;;
+  --help) print "Usage: ./scripts/bootstrap-local.sh [--calendar-id ID] [--management-email ADDRESS ...] [--fiscal-year-start MM-DD] [--hr-system-name NAME] [--holidays-file JSON_PATH] [--dry-run]"; exit 0 ;;
   *) configure_args+=("$arg") ;;
  esac
 done

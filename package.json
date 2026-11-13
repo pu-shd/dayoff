@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Personal leave tracking with Google Apps Script, Calendar and CALM reminders",
+  "description": "Personal leave tracking with Google Apps Script, Calendar and HR entry reminders",
   "scripts": {
     "build": "node scripts/build.mjs",
     "test": "tsx --test tests/*.test.ts",
