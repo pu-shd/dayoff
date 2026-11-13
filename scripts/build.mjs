@@ -73,6 +73,7 @@ await build({
 const handlers = [
   "doGet",
   "getDashboard",
+  "getStaffCalendar",
   "initialize",
   "importHistory",
   "getHistoryYear",

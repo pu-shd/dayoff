@@ -46,6 +46,12 @@ Cancellation removes app-owned events and reverses personal usage. If CALM was e
 
 Reminder settings are stored privately in Script Properties. Schedule replacement creates the new trigger before deleting old ones. A script lock serializes digest attempts; an attempt marker is persisted before MailApp so failures and interruptions cannot cause an automatic same-day resend. Successful sends also record their local date and timestamp. Scheduled runs skip weekends and paused schedules. On-demand digests require an authenticated, single-use nonce.
 
+## Read-only Calendar context
+
+`getStaffCalendar` validates up to 32 fiscal-year ranges, selects unique working dates, and verifies the owner before reading the configured Calendar. It requests only summary, start/end and status fields. A conservative UTC window covers all configured timezones; results are mapped back to selected local dates, so gaps and exclusive all-day ends are respected. One list call is bounded at Google's 2,500-event maximum; responses with further pages or more than 200 displayed event occurrences are explicitly marked incomplete.
+
+Small results use a private Script Cache for 120 seconds. The key includes Calendar ID, timezone, selected dates and the current Calendar revision. Authorized Calendar mutations change that revision after ownership preflight. Refresh bypasses the cache. The client debounces requests, rejects stale responses and leaves preview/Save independent of the lookup. Nothing is written to Journal or sent through MailApp by this endpoint.
+
 ## Access
 
 Each deployment uses MYSELF access and executes as its deployer. Every handler also verifies the configured owner's effective identity. Coworkers deploy separately.

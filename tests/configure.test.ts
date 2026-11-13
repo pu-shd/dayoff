@@ -166,3 +166,29 @@ test("fiscal-year start is configurable through setup and invalid dates never ov
   );
   assert.equal(readFileSync(file, "utf8"), saved);
 });
+
+test("holiday files replace the private dates and support safe repeatable dry runs", () => {
+  const dir = mkdtempSync(join(tmpdir(), "dayoff-holidays-")),
+    file = join(dir, "config.json"),
+    holidays = join(dir, "holidays.json");
+  writeFileSync(file, JSON.stringify(example));
+  writeFileSync(holidays, JSON.stringify(["2026-11-26", "2026-11-27"]));
+  const args = ["--config", file, "--holidays-file", holidays];
+  assert.equal(run([...args, "--dry-run"], dir).status, 0);
+  assert.deepEqual(JSON.parse(readFileSync(file, "utf8")).holidays, []);
+  for (let i = 0; i < 2; i++) assert.equal(run(args, dir).status, 0);
+  assert.deepEqual(JSON.parse(readFileSync(file, "utf8")), {
+    ...example,
+    holidays: ["2026-11-26", "2026-11-27"],
+  });
+  for (const values of [
+    ["2026-02-30"],
+    ["2026-11-26", "2026-11-26"],
+    ["2028-11-26"],
+  ]) {
+    writeFileSync(holidays, JSON.stringify(values));
+    const before = readFileSync(file, "utf8");
+    assert.notEqual(run(args, dir).status, 0);
+    assert.equal(readFileSync(file, "utf8"), before);
+  }
+});

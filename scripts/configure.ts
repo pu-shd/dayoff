@@ -8,10 +8,10 @@ async function main() {
     path: string | undefined,
     dry = false;
   const recipients: string[] = [];
-  let fiscalStart: string | undefined;
+  let fiscalStart: string | undefined, holidayFile: string | undefined;
   if (args.includes("--help")) {
     console.log(
-      "Usage: node scripts/configure.ts [--calendar-id ID] [--management-email ADDRESS ...] [--fiscal-year-start MM-DD] [--config PATH] [--dry-run]",
+      "Usage: node scripts/configure.ts [--calendar-id ID] [--management-email ADDRESS ...] [--fiscal-year-start MM-DD] [--holidays-file JSON_PATH] [--config PATH] [--dry-run]",
     );
     return;
   }
@@ -25,6 +25,7 @@ async function main() {
       flag !== "--calendar-id" &&
       flag !== "--management-email" &&
       flag !== "--fiscal-year-start" &&
+      flag !== "--holidays-file" &&
       flag !== "--config"
     )
       throw Error("Unknown configuration option.");
@@ -37,6 +38,9 @@ async function main() {
     } else if (flag === "--fiscal-year-start") {
       if (fiscalStart) throw Error("Supply one fiscal-year start.");
       fiscalStart = value;
+    } else if (flag === "--holidays-file") {
+      if (holidayFile) throw Error("Supply one holiday file.");
+      holidayFile = value;
     } else if (flag === "--management-email") {
       recipients.push(value);
     } else {
@@ -57,9 +61,9 @@ async function main() {
         fiscalStart)
   )
     throw Error("Supply a valid annual fiscal-year start in MM-DD format.");
-  if (!calendar && !recipients.length && !fiscalStart)
+  if (!calendar && !recipients.length && !fiscalStart && !holidayFile)
     throw Error(
-      "Supply --calendar-id, --management-email, or --fiscal-year-start.",
+      "Supply --calendar-id, --management-email, --fiscal-year-start, or --holidays-file.",
     );
   if (
     recipients.some(
@@ -96,6 +100,43 @@ async function main() {
     ...(calendar ? { calendarId: calendar } : {}),
     ...(recipients.length ? { managementEmails: recipients } : {}),
   };
+  if (holidayFile) {
+    const dates: unknown = JSON.parse(await readFile(holidayFile, "utf8")),
+      settings = updated as Record<string, unknown>;
+    const validDate = (d: unknown): d is string =>
+      typeof d === "string" &&
+      /^\d{4}-\d{2}-\d{2}$/.test(d) &&
+      Number.isFinite(Date.parse(d)) &&
+      new Date(d).toISOString().slice(0, 10) === d;
+    const fy = settings.fiscalYear,
+      first = settings.fiscalYearStart ?? "07-01";
+    if (
+      typeof fy !== "number" ||
+      !Number.isInteger(fy) ||
+      fy < 2000 ||
+      fy > 2200 ||
+      typeof first !== "string" ||
+      !validDate("2001-" + first)
+    )
+      throw Error(
+        "Configuration requires a valid fiscal period before loading holidays.",
+      );
+    const year = fy - (first === "01-01" ? 0 : 1),
+      start = year + "-" + first,
+      end = new Date(Date.parse(year + 1 + "-" + first) - 86400000)
+        .toISOString()
+        .slice(0, 10);
+    if (
+      !Array.isArray(dates) ||
+      dates.length > 366 ||
+      !dates.every((d) => validDate(d) && d >= start && d <= end) ||
+      new Set(dates).size !== dates.length
+    )
+      throw Error(
+        "Supply a holiday JSON array of unique valid dates within the configured fiscal year.",
+      );
+    settings.holidays = [...dates].sort();
+  }
   if (dry) {
     console.log(
       "Dry run: would update private connection settings; no files changed.",

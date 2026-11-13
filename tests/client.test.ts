@@ -65,6 +65,9 @@ function harness(
     },
   });
   const calls: { name: string; args: unknown[] }[] = [];
+  let staffResponse:
+    | ((ranges: { first: string; last: string }[]) => unknown)
+    | undefined;
   const failures = new Map<string, { message: string; persist: boolean }>();
   const state = {
     fiscalPeriod: { start: "2026-07-01", end: "2027-06-30" },
@@ -104,6 +107,16 @@ function harness(
     const failure = failures.get(name);
     failures.delete(name);
     if (failure && !failure.persist) throw new Error(failure.message);
+    if (name === "getStaffCalendar") {
+      if (staffResponse)
+        return staffResponse(args[0] as { first: string; last: string }[]);
+      return {
+        days: [],
+        truncated: false,
+        checkedAt: "2026-11-13T17:00:00Z",
+        cached: false,
+      };
+    }
     if (name === "importHistory") {
       state.history.years = historyIndex(archive!.years);
       state.history.pendingImportCount = 0;
@@ -210,6 +223,7 @@ function harness(
     URL,
     Blob,
     setTimeout,
+    clearTimeout,
   });
   const get = (id: string) => document.getElementById(id)!;
   async function tick() {
@@ -239,6 +253,11 @@ function harness(
     tick,
     preview,
     choice,
+    staffResponse: (
+      fn: (ranges: { first: string; last: string }[]) => unknown,
+    ) => {
+      staffResponse = fn;
+    },
     failNext: (name: string, message: string, persist = false) =>
       failures.set(name, { message, persist }),
   };
@@ -716,4 +735,118 @@ test("a recorded request with unfinished work keeps its local error visible and 
   assert.match(notice.textContent!, /Calendar update failed/);
   assert.doesNotMatch(notice.textContent!, /Calendar updated/);
   assert.equal(h.get("message").classList.contains("hide"), true);
+});
+
+test("holiday-only date rows are flagged before preview and the configured dates are visible", async () => {
+  const config = { ...cfg, holidays: ["2026-11-26", "2026-11-27"] };
+  const h = harness([], undefined, undefined, config);
+  await h.tick();
+  assert.match(h.get("holiday-summary").textContent!, /2 configured holidays/);
+  const first = h.document.querySelector("[name=first]") as HTMLInputElement;
+  first.value = "2026-11-26";
+  first.dispatchEvent(new h.window.Event("input", { bubbles: true }));
+  assert.match(
+    h.document.querySelector(".date-warning")!.textContent!,
+    /No working days/,
+  );
+  assert.equal((h.get("preview-request") as HTMLButtonElement).disabled, true);
+  const last = h.document.querySelector("[name=last]") as HTMLInputElement;
+  last.value = "2026-11-30";
+  last.dispatchEvent(new h.window.Event("input", { bubbles: true }));
+  assert.equal((h.get("preview-request") as HTMLButtonElement).disabled, false);
+  assert.match(
+    h.document.querySelector(".date-warning")!.textContent!,
+    /2 holidays/,
+  );
+  assert.match(h.get("holiday-dates").textContent!, /2026-11-26/);
+});
+test("an empty holiday list is stated explicitly and saved holiday charges are flagged for review", async () => {
+  const h = harness();
+  await h.tick();
+  assert.match(
+    h.get("holiday-summary").textContent!,
+    /No holidays are configured/,
+  );
+  const r = record({
+    id: "request-holiday",
+    category: "vacation",
+    mode: "full",
+    first: "2026-11-26",
+    last: "2026-11-26",
+  });
+  const config = { ...cfg, holidays: ["2026-11-26"] };
+  const loaded = harness([r], undefined, undefined, config);
+  await loaded.tick();
+  assert.match(loaded.get("records").textContent!, /saved holiday date/);
+  assert.match(loaded.get("records").textContent!, /7.25/);
+});
+
+test("Staff Calendar lookup is debounced, read-only and does not hold up preview", async () => {
+  const h = harness();
+  await h.tick();
+  h.staffResponse((ranges) => ({
+    days: [
+      {
+        date: ranges[0].first,
+        events: [{ summary: "<b>Alex Off</b>", when: "All day" }],
+      },
+    ],
+    truncated: false,
+    checkedAt: "2026-11-13T17:00:00Z",
+  }));
+  const first = h.document.querySelector("[name=first]") as HTMLInputElement;
+  first.value = "2026-11-16";
+  first.dispatchEvent(new h.window.Event("input", { bubbles: true }));
+  await h.preview();
+  assert.equal(h.get("preview-hours").textContent, "7.25");
+  assert.equal(h.calls.filter((c) => c.name === "getStaffCalendar").length, 0);
+  await new Promise((resolve) => setTimeout(resolve, 600));
+  await h.tick();
+  assert.equal(h.calls.filter((c) => c.name === "getStaffCalendar").length, 1);
+  assert.match(h.get("staff-results").textContent!, /<b>Alex Off<\/b>/);
+  assert.equal(h.get("staff-results").querySelector("b"), null);
+  h.get("staff-refresh").click();
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  await h.tick();
+  assert.equal(
+    h.calls.filter((c) => c.name === "getStaffCalendar").at(-1)!.args[1],
+    true,
+  );
+});
+test("late Calendar responses cannot replace the context for newly selected dates", async () => {
+  const h = harness();
+  await h.tick();
+  h.staffResponse((ranges) => {
+    const value = {
+      days: [
+        {
+          date: ranges[0].first,
+          events: [
+            {
+              summary:
+                ranges[0].first === "2026-11-16"
+                  ? "Old context"
+                  : "Current context",
+              when: "All day",
+            },
+          ],
+        },
+      ],
+      truncated: false,
+      checkedAt: "2026-11-13T17:00:00Z",
+    };
+    return ranges[0].first === "2026-11-16"
+      ? new Promise((resolve) => setTimeout(() => resolve(value), 800))
+      : value;
+  });
+  const first = h.document.querySelector("[name=first]") as HTMLInputElement;
+  first.value = "2026-11-16";
+  first.dispatchEvent(new h.window.Event("input", { bubbles: true }));
+  await new Promise((resolve) => setTimeout(resolve, 550));
+  first.value = "2026-11-20";
+  first.dispatchEvent(new h.window.Event("input", { bubbles: true }));
+  await new Promise((resolve) => setTimeout(resolve, 850));
+  await h.tick();
+  assert.match(h.get("staff-results").textContent!, /Current context/);
+  assert.doesNotMatch(h.get("staff-results").textContent!, /Old context/);
 });

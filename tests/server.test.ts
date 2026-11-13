@@ -30,6 +30,11 @@ function harness(
     zone: string;
   }[] = [];
   const calendarWrites: string[] = [];
+  const calendarLists: {
+    calendarId: string;
+    options: Record<string, unknown>;
+  }[] = [];
+  const scriptCache = new Map<string, string>();
   let beforeWrite: (() => void) | undefined;
   let etagVersion = 0;
   let failRead = false;
@@ -91,6 +96,10 @@ function harness(
       getScriptLock: () => ({ waitLock: () => {}, releaseLock: () => {} }),
     },
     CacheService: {
+      getScriptCache: () => ({
+        get: (key: string) => scriptCache.get(key) || null,
+        put: (key: string, value: string) => scriptCache.set(key, value),
+      }),
       getUserCache: () => ({
         put: (k: string, v: string) => cache.set(k, v),
         get: (k: string) => cache.get(k) || null,
@@ -107,6 +116,11 @@ function harness(
     },
     Calendar: {
       Events: {
+        list: (calendarId: string, options: Record<string, unknown>) => {
+          calendarLists.push({ calendarId, options });
+          if (failRead) throw Error("503 private provider details");
+          return { items: [...events.values()] };
+        },
         get: (_calendar: string, id: string) => {
           if (failRead) throw Error("503 service unavailable");
           const e = events.get(id);
@@ -225,6 +239,7 @@ function harness(
     properties,
     events,
     calendarWrites,
+    calendarLists,
     failCalendarRead: () => {
       failRead = true;
     },
@@ -804,4 +819,49 @@ test("migration 005 appends cancellation metadata without changing hours or touc
   assert.deepEqual([...s.records[0].cancelledDates!], []);
   assert.equal(JSON.stringify(s.totals), totals);
   assert.equal(h.calendarWrites.length, writes);
+});
+
+test("Staff Calendar reads are cached, refreshable and have no ledger, mail or event mutations", () => {
+  const h = harness(),
+    ranges = [{ first: "2026-11-16", last: "2026-11-18" }];
+  h.events.set("coworker", {
+    summary: "Alex Off",
+    start: { date: "2026-11-16" },
+    end: { date: "2026-11-18" },
+  });
+  const first = h.api.getStaffCalendar(ranges);
+  assert.equal(first.cached, false);
+  assert.equal(first.days[0].events[0].summary, "Alex Off");
+  assert.equal(h.api.getStaffCalendar(ranges).cached, true);
+  assert.equal(h.calendarLists.length, 1);
+  assert.equal(h.calendarLists[0].calendarId, cfg.calendarId);
+  assert.equal(h.calendarLists[0].options.singleEvents, true);
+  assert.equal(
+    h.calendarLists[0].options.fields,
+    "items(summary,start,end,status),nextPageToken",
+  );
+  h.api.getStaffCalendar(ranges, true);
+  assert.equal(h.calendarLists.length, 2);
+  assert.equal(h.rows.length, 0);
+  assert.equal(h.properties.size, 0);
+  assert.equal(h.mails.length, 0);
+  assert.deepEqual(h.calendarWrites, []);
+  h.setIdentity("another@example.edu");
+  assert.throws(() => h.api.getStaffCalendar(ranges), /different account/);
+  assert.equal(h.calendarLists.length, 2);
+});
+test("invalid lookup ranges and provider failures stay read-only and return safe errors", () => {
+  const h = harness();
+  assert.throws(
+    () => h.api.getStaffCalendar([{ first: "2028-01-01", last: "2028-01-02" }]),
+    /fiscal/,
+  );
+  assert.equal(h.calendarLists.length, 0);
+  h.failCalendarRead();
+  assert.throws(
+    () => h.api.getStaffCalendar([{ first: "2026-11-16", last: "2026-11-16" }]),
+    /Calendar availability could not be checked/,
+  );
+  assert.deepEqual(h.calendarWrites, []);
+  assert.equal(h.rows.length, 0);
 });

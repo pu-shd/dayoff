@@ -374,6 +374,21 @@
         border: 1px solid var(--line);
         background: var(--surface);
       }
+      #staff-availability {
+        margin-top: 18px;
+      }
+      #staff-availability h3 {
+        margin: 0;
+      }
+      #staff-availability .staff-date {
+        margin: 8px 0;
+        font-size: 13px;
+        line-height: 1.5;
+      }
+      #staff-refresh {
+        padding: 6px 10px;
+        font-size: 12px;
+      }
       .summary-box p {
         margin: 0;
         font-size: 14px;
@@ -663,19 +678,43 @@
                     >Absent until<input type="time" name="end" value="11:00"
                   /></label>
                 </div>
+                <p
+                  class="date-warning muted hide"
+                  role="status"
+                  aria-live="polite"
+                ></p>
               </fieldset>
             </div>
             <button id="add-dates" type="button" class="secondary">
               Add dates
             </button>
+            <aside
+              id="staff-availability"
+              class="summary-box hide"
+              aria-labelledby="staff-heading"
+            >
+              <div class="heading">
+                <h3 id="staff-heading">Staff Calendar</h3>
+                <button id="staff-refresh" type="button" class="secondary">
+                  Refresh
+                </button>
+              </div>
+              <p id="staff-status" role="status" aria-live="polite"></p>
+              <div id="staff-results"></div>
+              <small id="staff-checked"></small>
+            </aside>
             <p class="muted">
               <small
-                >Weekends and configured holidays are excluded. For half days,
-                enter the actual absence interval; the charge stays
+                ><span id="holiday-summary">Weekends are excluded.</span> For
+                half days, enter the actual absence interval; the charge stays
                 fixed.</small
               >
             </p>
-            <button type="submit">Preview request</button>
+            <details id="holiday-details" class="quiet-details hide">
+              <summary>Configured holiday dates</summary>
+              <p id="holiday-dates"></p>
+            </details>
+            <button type="submit" id="preview-request">Preview request</button>
           </form>
           <section id="preview" class="hide" aria-label="Request preview">
             <div class="preview-top">
@@ -900,7 +939,7 @@
     <script>
       'use strict';
       const focus = <?!= focus ?>;
-      let state, pendingInput, historyYear, historyKey, historyLoad = 0, working = false, hasError = false, savedPreview = false;
+      let state, pendingInput, historyYear, historyKey, historyLoad = 0, working = false, hasError = false, savedPreview = false, lookupTimer, lookupGeneration = 0, lookupKey = '', lookupPending = false;
       const $ = id => document.getElementById(id);
       const money = n => (n / 100).toFixed(2);
       const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
@@ -935,6 +974,8 @@
        $('install').disabled=!live; $('stop').disabled=!state.reminders.enabled;
        $('send-now').disabled=!live || !state.reminders.pendingCount || state.reminders.lastSentDate===state.today || state.reminders.attemptDate===state.today;
        $('send').disabled=!live || !pendingInput;
+       $('staff-refresh').disabled=working || lookupPending || !lookupKey;
+       $('preview-request').disabled=working || dateRows().some(row=>row.dataset.noWorkingDays==='true');
        updateRows();
       }
       function busy(value) { working=value;renderMode();enabled(); }
@@ -1035,6 +1076,10 @@
        for(const [key,label] of [['vacation','Vacation'],['sick','Sick'],['personal','Personal']]){
         const card=text('div','','card');card.setAttribute('data-category',key);card.append(text('span',label+' available'),text('strong',money(s.totals.available[key])+' h'),statDetails('Details',money(s.totals.used[key])+' used · '+money(s.totals.planned[key])+' planned · '+money(s.totals.projected[key])+' projected at FY end'));$('cards').append(card);
        }
+       const holidays=s.config.holidays.filter(d=>d>=s.fiscalPeriod.start&&d<=s.fiscalPeriod.end);
+       $('holiday-summary').textContent=holidays.length?'Weekends and '+holidays.length+' configured holidays are excluded.':'Weekends are excluded. No holidays are configured.';
+       $('holiday-details').classList.toggle('hide',!holidays.length);$('holiday-dates').textContent=holidays.join(' · ');
+       for(const row of dateRows())validateDateRow(row);
        $('full').textContent=money(s.config.policy.fullDay);$('half').textContent=money(s.config.policy.halfDay);$('ledger').href=s.ledgerUrl;
        $('record-note').textContent='Imported monthly totals are assigned to month-end, so balances within an imported month are approximate. Avoid re-entering leave already included in those totals. Dates submitted together share one request email and CALM confirmation; individual dates can be removed below.';
        const queue=s.records.filter(outstanding);$('calm-count').textContent=queue.length+' outstanding';$('calm-queue').replaceChildren();$('calm-empty').classList.toggle('hide',queue.length!==0);
@@ -1071,13 +1116,14 @@
          for(const d of r.days){
           const removed=r.status==='cancelled' || r.cancelledDates?.includes(d.date),dayRow=document.createElement('tr');dayRow.dataset.date=d.date;dayRow.setAttribute('data-category',r.input.category);
           const calm=removed?(r.calm==='correction' && calmDays(r).some(x=>x.date===d.date)?'correction':'no outstanding action'):r.calm==='correction'?'entered':r.calm;
-          dayRow.append(text('td',d.date+(removed?' · removed':'')),text('td',money(d.hours)),text('td',calm));
+          dayRow.append(text('td',d.date+(removed?' · removed':'')+(s.config.holidays.includes(d.date)?' · configured holiday':'')),text('td',money(d.hours)),text('td',calm));
           const controls=document.createElement('td');
           if(!removed)controls.append(button('Remove date',event=>{if(confirm('Remove '+date(d.date)+' ('+money(d.hours)+' hours) from this request? Other dates stay in place. Correct CALM if it was already entered.'))action('removeRequestDate',event.currentTarget,r.id,r.version,d.date);},'danger'));
           dayRow.append(controls);body.append(dayRow);
          }
          table.append(body);wrap.append(table);details.append(wrap);dateCell.append(details);
         }
+        const holidayDates=r.legacy?[]:remaining.filter(d=>s.config.holidays.includes(d.date));if(holidayDates.length)dateCell.append(text('small','Review '+holidayDates.length+' saved holiday date(s); saved charges are unchanged.'));
         row.append(dateCell,text('td',cap(r.input.category)+(r.status==='cancelled'?' · cancelled':'')),text('td',money((r.legacy?r.days:remaining).reduce((sum,d)=>sum+d.hours,0))));
         row.append(text('td',r.legacy?'Historical; CALM unverified':'CALM: '+r.calm+' · Calendar: '+r.calendar+' · Email: '+r.email));
         const controls=document.createElement('td');
@@ -1093,11 +1139,43 @@
        renderHistory(s.history);
        enabled();
       }
-      function invalidate(){if(savedPreview){$('email-choice').value='self';savedPreview=false;}pendingInput=null;$('preview').classList.add('hide');clearFeedback(feedbackAt($('send')));enabled();}
+      function invalidate(){for(const row of dateRows())validateDateRow(row);queueStaffLookup();if(savedPreview){$('email-choice').value='self';savedPreview=false;}pendingInput=null;$('preview').classList.add('hide');clearFeedback(feedbackAt($('send')));enabled();}
       const dateRows=()=>[...$('date-rows').querySelectorAll('.date-row')];
       function updateRows(){
        const rows=dateRows();$('add-dates').disabled=working || rows.length>=32;
        rows.forEach((row,index)=>{row.querySelector('legend').textContent='Date range '+(index+1);const remove=row.querySelector('.remove-dates');remove.classList.toggle('hide',rows.length===1);remove.disabled=working||rows.length===1;remove.setAttribute('aria-label','Remove date range '+(index+1));});
+      }
+      function rowDates(row){
+       if(!state)return null;const first=row.querySelector('[name=first]').value,last=row.querySelector('[name=last]').value||first;
+       const valid=d=>/^\d{4}-\d{2}-\d{2}$/.test(d)&&Number.isFinite(Date.parse(d))&&new Date(d).toISOString().slice(0,10)===d;
+       if(!valid(first)||!valid(last)||first>last||first<state.fiscalPeriod.start||last>state.fiscalPeriod.end)return null;
+       const dates=[],holidays=[];let weekends=0;
+       for(let d=first;d<=last;d=new Date(Date.parse(d+'T12:00:00Z')+86400000).toISOString().slice(0,10)){
+        const dow=new Date(d+'T12:00:00Z').getUTCDay();if(dow===0||dow===6)weekends++;else if(state.config.holidays.includes(d))holidays.push(d);else dates.push(d);
+       }
+       return {first,last,dates,holidays,weekends};
+      }
+      function showStaff(result){
+       const total=result.days.reduce((n,day)=>n+day.events.length,0),container=$('staff-results');container.replaceChildren();
+       $('staff-status').textContent=result.truncated?'Some Calendar entries could not be shown. Open the calendar to review the complete range.':total?total+' Calendar '+(total===1?'entry':'entries')+' across '+result.days.length+' selected working '+(result.days.length===1?'date.':'dates.'):'No Calendar entries on the selected working dates.';
+       function line(day){const p=text('div','','staff-date');p.append(text('strong',day.date+' · '));const label=e=>e.summary+' ('+e.when+')';p.append(text('span',day.events.length?day.events.slice(0,3).map(label).join(' · '):result.truncated?'No entries in these results':'No entries'));if(day.events.length>3){const details=document.createElement('details');details.append(text('summary',(day.events.length-3)+' more entries'),text('p',day.events.slice(3).map(label).join(' · ')));p.append(details);}return p;}
+       if(total){for(const day of result.days.slice(0,8))container.append(line(day));if(result.days.length>8){const details=document.createElement('details');details.append(text('summary',(result.days.length-8)+' more dates'));for(const day of result.days.slice(8))details.append(line(day));container.append(details);}}
+       $('staff-checked').textContent='Checked '+new Intl.DateTimeFormat('en-US',{hour:'numeric',minute:'2-digit',timeZone:state.config.timeZone}).format(new Date(result.checkedAt));
+      }
+      function queueStaffLookup(force=false){
+       const selected=dateRows().map(rowDates),valid=selected.every(row=>row&&row.dates.length),ranges=valid?selected.map(row=>({first:row.first,last:row.last})):[],key=ranges.length?JSON.stringify(ranges):'';
+       if(!force && key===lookupKey)return;
+       clearTimeout(lookupTimer);lookupKey=key;const generation=++lookupGeneration;lookupPending=!!key;
+       $('staff-availability').classList.toggle('hide',!key);$('staff-results').replaceChildren();$('staff-checked').textContent='';
+       if(!key){enabled();return;}
+       $('staff-status').textContent='Checking Staff Calendar…';enabled();
+       lookupTimer=setTimeout(async()=>{try{const result=await rpc('getStaffCalendar',ranges,force);if(generation===lookupGeneration)showStaff(result);}catch(e){if(generation===lookupGeneration)$('staff-status').textContent=e.message||'Calendar availability could not be checked. Previewing and saving remain available.';}finally{if(generation===lookupGeneration){lookupPending=false;enabled();}}},force?0:500);
+      }
+      function validateDateRow(row){
+       const selected=rowDates(row),warning=row.querySelector('.date-warning'),empty=!!selected&&!selected.dates.length;
+       row.dataset.noWorkingDays=String(empty);row.querySelector('[name=first]').setCustomValidity?.(empty?'No working days in this range. Weekends and configured holidays are excluded.':'');
+       warning.textContent=empty?'No working days in this range. Weekends and configured holidays are excluded.':selected&&(selected.holidays.length||selected.weekends)?selected.holidays.length+' holidays and '+selected.weekends+' weekend days will be excluded.':'';
+       warning.className='date-warning '+(empty?'error':'muted')+(warning.textContent?'':' hide');
       }
       function defaultLastDate(row){const first=row.querySelector('[name=first]'),last=row.querySelector('[name=last]');if(!last.value || row.dataset.autoLast==='true'){last.value=first.value;row.dataset.autoLast='true';}}
       function bindRow(row){
@@ -1121,7 +1199,7 @@
       function rowInput(row){if(!row.querySelector('[name=last]').value)defaultLastDate(row);return Object.fromEntries([...row.querySelectorAll('[name]')].map(field=>[field.name,field.value]));}
       $('request-form').addEventListener('input',invalidate);
       $('request-form').addEventListener('submit',async e=>{
-       e.preventDefault();const feedback=feedbackAt(document.querySelector('#request-form button[type=submit]'));clearFeedback(feedback);if(savedPreview)$('email-choice').value='self';busy(true);
+       e.preventDefault();const feedback=feedbackAt(document.querySelector('#request-form button[type=submit]'));clearFeedback(feedback);const refreshLookup=savedPreview;if(savedPreview)$('email-choice').value='self';queueStaffLookup(refreshLookup);busy(true);
        const ranges=dateRows().map(rowInput);pendingInput={...ranges[0],ranges,category:document.querySelector('[name=category]').value,id:crypto.randomUUID(),emailTo:$('email-choice').value};
        try{renderPreview(await rpc('preview',pendingInput));message('');}
        catch(err){invalidate();notify(feedback,err.message,true);}finally{busy(false);}
@@ -1138,6 +1216,7 @@
        }
        if(ok)notify(feedbackAt(trigger),'Request saved and Calendar updated. '+(state.records.find(r=>r.id===id)?.email==='skipped'?'No request email was sent.':'Your chosen request email was sent.')+' CALM entry remains on your checklist.');
       });
+      $('staff-refresh').addEventListener('click',()=>queueStaffLookup(true));
       $('import-history').addEventListener('click',event=>action('importHistory',event.currentTarget));
       $('history-year').addEventListener('change',()=>loadHistory(Number($('history-year').value)));
       $('history-export').addEventListener('click',()=>{if(!historyYear)return;const y=historyYear,rows=['month,vacation_used_hours,sick_used_hours,personal_used_hours,vacation_closing_hours,sick_closing_hours,personal_closing_hours'];for(const m of y.months)rows.push([m.month,...['vacation','sick','personal'].map(c=>money(m[c])),...['vacation','sick','personal'].map(c=>m.balances[c]===null?'':money(m.balances[c]))].join(','));rows.push(['annual_used',...['vacation','sick','personal'].map(c=>money(y.totals[c])),'','',''].join(','));download('dayoff-history-FY'+y.fiscalYear+'.csv',rows.join('\r\n'));});

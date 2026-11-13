@@ -24,6 +24,11 @@ import {
 } from "./workflow.js";
 import { migration002, migration005 } from "./migrations.js";
 import {
+  availabilityDates,
+  staffSummary,
+  type StaffLookup,
+} from "./availability.js";
+import {
   validateHistory,
   validateHistoryYear,
   historyIndex,
@@ -299,6 +304,7 @@ function calendar(c: Config, r: RecordEntry): void {
     if (current) check(current, d.date);
     return { d, id, current, remove };
   });
+  props().setProperty("CALENDAR_REVISION", Utilities.getUuid());
   for (const { d, id, current, remove } of operations) {
     if (remove) {
       if (!current) continue;
@@ -446,6 +452,56 @@ function doGet(e: GoogleAppsScript.Events.DoGet) {
     .evaluate()
     .setTitle("Day Off")
     .addMetaTag("viewport", "width=device-width, initial-scale=1");
+}
+function getStaffCalendar(ranges: unknown, force = false): StaffLookup {
+  return safe(() => {
+    const c = actor();
+    invariant(typeof force === "boolean", "Invalid calendar refresh option.");
+    const dates = availabilityDates(c, ranges),
+      checkedAt = new Date().toISOString();
+    if (!dates.length)
+      return { days: [], truncated: false, checkedAt, cached: false };
+    const key =
+      "staff:" +
+      eventId(
+        c.calendarId +
+          ":" +
+          c.timeZone +
+          ":" +
+          (props().getProperty("CALENDAR_REVISION") || "0"),
+        dates.join(","),
+      );
+    const cache = CacheService.getScriptCache(),
+      cached = force ? null : cache.get(key);
+    if (cached) return { ...JSON.parse(cached), cached: true } as StaffLookup;
+    let page: GoogleAppsScript.Calendar.Schema.Events;
+    try {
+      page = Calendar!.Events!.list(c.calendarId, {
+        timeMin: plusDays(dates[0], -1) + "T00:00:00Z",
+        timeMax: plusDays(dates.at(-1)!, 2) + "T00:00:00Z",
+        timeZone: c.timeZone,
+        singleEvents: true,
+        showDeleted: false,
+        orderBy: "startTime",
+        maxResults: 2500,
+        fields: "items(summary,start,end,status),nextPageToken",
+      });
+    } catch {
+      throw new Error(
+        "Calendar availability could not be checked. Previewing and saving remain available.",
+      );
+    }
+    const summary = staffSummary(c, dates, page.items || []),
+      result = {
+        ...summary,
+        truncated: summary.truncated || !!page.nextPageToken,
+        checkedAt,
+        cached: false,
+      };
+    const payload = JSON.stringify(result);
+    if (payload.length < 30000) cache.put(key, payload, 120);
+    return result;
+  });
 }
 function getDashboard() {
   return safe(() => dashboard(actor()));
@@ -789,6 +845,7 @@ function health() {
 export const handlers = {
   doGet,
   getDashboard,
+  getStaffCalendar,
   initialize,
   importHistory,
   getHistoryYear,

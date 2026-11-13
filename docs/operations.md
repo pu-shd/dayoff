@@ -98,3 +98,11 @@ Use Add dates to create noncontiguous ranges in one request. Each range can be f
 Migration 005 appends per-date cancellation defaults on the next authenticated write or reminder. It changes no original dates or charges and never tags Calendar events. New Calendar events carry the Apps Script project ID, request ID and date; updates and deletes require matching tags and conditional event versions. An event with missing or mismatched ownership tags is left untouched. A failed Calendar read does not authorize event creation or deletion. Resolve the conflict before retrying pending steps.
 
 Older events with only `dayoffId` need a separate, reviewed ownership migration. Do not work around a conflict by creating a duplicate request, manually editing the Journal, or applying another instance's tags. Establish the event's original project and matching saved request first. This release deliberately provides no automatic claim-by-title/date/ID operation. A copied Apps Script project has a different identity and cannot adopt the old project's events. Keep the existing project for ordinary CLI updates.
+
+## Holiday configuration and Calendar context
+
+Set holidays with `node scripts/configure.ts --holidays-file PATH` (also accepted by bootstrap). The JSON array replaces the list; use --dry-run first. Dates must be unique, real ISO dates in the configured fiscal year. Review the public FY2027 Princeton preset's cited sources in the README before using it. Update your private configuration secret after a local change if using GitOps.
+
+The native date picker allows date selection, while row validation rejects ranges with no working days. The form states the active holiday count or explicitly says none are configured. Newly configured holidays do not rewrite saved charges; review flagged active requests and remove incorrect dates through the app. The original monthly import remains the balance anchor.
+
+Staff Calendar lookup starts after date entry pauses. It uses one bounded Calendar list request with recurring events expanded and a two-minute private Script Cache. Refresh bypasses that cache. Calendar mutation invalidates subsequent lookup keys. Preview and Save do not await availability results. No Calendar event data is logged or persisted to the attendance ledger.

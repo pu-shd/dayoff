@@ -60,6 +60,24 @@ The annual rollover date defaults to July 1 and is configurable as `fiscalYearSt
 
 Choose the date before initializing a ledger. An initialized ledger retains its fiscal boundaries. Annual rollover remains an explicit new-year setup with reviewed carryover; changing the configured date does not move existing records or automatically open another year. The legacy workbook importer supports its July–June layout and rejects a conflicting fiscal start at build time.
 
+Holiday dates are explicit configuration, separate from the Staff Calendar. The date picker can select any date; holiday-only or weekend-only ranges are flagged and cannot be previewed. Mixed ranges exclude those dates. The form shows the configured count and a disclosure with the dates; an empty list is stated explicitly.
+
+Load a reviewed JSON array of ISO dates through the CLI (or the same flag during bootstrap):
+
+```sh
+node scripts/configure.ts --holidays-file '/path/to/holidays.json' --dry-run
+node scripts/configure.ts --holidays-file '/path/to/holidays.json'
+./scripts/update.sh
+```
+
+The file replaces the holiday list and must contain unique valid dates within the configured fiscal year. A public Princeton staff preset is provided for FY2027:
+
+```sh
+node scripts/configure.ts --holidays-file config/holidays/princeton-fy2027.json
+```
+
+It contains 14 observed weekday holidays based on [Princeton HR's Thanksgiving dates](https://hr.princeton.edu/events/2026/university-holiday-%E2%80%94-thanksgiving), [winter break](https://hr.princeton.edu/events/2026/university-holiday-%E2%80%94-winter-break), and the [Princeton University schedule published by ReCAP](https://recap.princeton.edu/about/hours-contact), reviewed November 13, 2026. Use your own employer's schedule or exceptions as applicable; a new FY needs a reviewed list. Holiday changes affect new calculations. Saved charges remain fixed; active requests containing newly configured holidays are flagged in Your record for review and individual removal. Imported monthly totals remain unchanged.
+
 Optional workbook import:
 
 ```sh
@@ -96,6 +114,12 @@ Use **Add dates** for additional date ranges in a single submission, such as thr
 Saving sends one chosen request email and creates one Calendar event per working date. All dates share a CALM confirmation and reminder entry, with every date and its hours listed. Expand a request in **Your record** to see each individual date and its status. **Remove date** restores only that date's personal allowance and removes only its owned Calendar event. **Cancel all remaining dates** cancels the rest. A removal sends one update through the original email choice. Date disclosures remain open after a removal. Imported monthly summaries expand to show their month-end posting and explain that exact daily charges cannot be inferred. Dates removed after CALM confirmation remain on the checklist as specific corrections; remaining dates keep their entered status. Changed hours or added dates after saving require a separate request.
 
 Request email defaults to **Email me a copy to resend**. You can instead select **Email the configured management recipients** or **No request email**. Saving always records the leave and updates Calendar; CALM tracking works with all three email choices. Each request retains its recipient choice for retries and cancellation notices. A new request defaults to self again.
+
+## Staff Calendar context while choosing dates
+
+After a short pause in date entry, Day Off checks the configured Staff Calendar and displays event titles and absence intervals for the selected working dates. The lookup runs separately from preview and Save; a slow or failed lookup does not hold up either action. Noncontiguous ranges exclude their gap dates. Multi-day events and all-day exclusive end dates are handled in the configured timezone. Titles are shown as written rather than used to infer approval or staffing levels.
+
+Results are cached for up to two minutes, with a checked time and a Refresh button that bypasses the cache. App Calendar writes invalidate later cached lookups. Old responses are discarded when the selected dates change. Large responses show an incomplete-results notice; open the Calendar for the full range. The owner-only read endpoint requests titles, start/end and status only, without descriptions or attendees. It creates no leave records, events, reminders or emails and logs no Calendar content.
 
 ## Calendar event ownership
 
