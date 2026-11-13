@@ -7,9 +7,10 @@ async function main() {
   let calendar: string | undefined,
     path: string | undefined,
     dry = false;
+  const recipients: string[] = [];
   if (args.includes("--help")) {
     console.log(
-      "Usage: node scripts/configure.ts --calendar-id ID [--config PATH] [--dry-run]",
+      "Usage: node scripts/configure.ts [--calendar-id ID] [--management-email ADDRESS ...] [--config PATH] [--dry-run]",
     );
     return;
   }
@@ -19,7 +20,11 @@ async function main() {
       dry = true;
       continue;
     }
-    if (flag !== "--calendar-id" && flag !== "--config")
+    if (
+      flag !== "--calendar-id" &&
+      flag !== "--management-email" &&
+      flag !== "--config"
+    )
       throw Error("Unknown configuration option.");
     const value = args[++i];
     if (!value || value.startsWith("--"))
@@ -27,16 +32,31 @@ async function main() {
     if (flag === "--calendar-id") {
       if (calendar) throw Error("Supply one calendar ID.");
       calendar = value;
+    } else if (flag === "--management-email") {
+      recipients.push(value);
     } else {
       if (path) throw Error("Supply one configuration path.");
       path = value;
     }
   }
   if (
-    !calendar ||
+    calendar !== undefined &&
     !/^[A-Za-z0-9_.+%=-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(calendar)
   )
     throw Error("Supply a valid Calendar ID, not a calendar URL.");
+  if (!calendar && !recipients.length)
+    throw Error("Supply --calendar-id or --management-email.");
+  if (
+    recipients.some(
+      (email) => !/^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/.test(email),
+    )
+  )
+    throw Error("Supply a valid management email address.");
+  if (
+    new Set(recipients.map((email) => email.toLowerCase())).size !==
+    recipients.length
+  )
+    throw Error("Supply each management email address once.");
   const vars: Record<string, string> = {};
   if (existsSync(".env"))
     for (const line of (await readFile(".env", "utf8")).split(/\r?\n/)) {
@@ -55,10 +75,14 @@ async function main() {
   const data: unknown = JSON.parse(await readFile(source, "utf8"));
   if (!data || typeof data !== "object" || Array.isArray(data))
     throw Error("Configuration must be a JSON object.");
-  const updated = { ...data, calendarId: calendar };
+  const updated = {
+    ...data,
+    ...(calendar ? { calendarId: calendar } : {}),
+    ...(recipients.length ? { managementEmails: recipients } : {}),
+  };
   if (dry) {
     console.log(
-      "Dry run: would set the private Calendar ID; no files changed.",
+      "Dry run: would update private connection settings; no files changed.",
     );
     return;
   }
@@ -70,7 +94,7 @@ async function main() {
   await chmod(temporary, 0o600);
   await rename(temporary, target);
   console.log(
-    "Private Calendar ID configured. Other settings and delivery mode retained.",
+    "Private connection settings configured. Other settings and delivery mode retained.",
   );
 }
 main().catch((e) => {

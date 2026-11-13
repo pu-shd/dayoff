@@ -42,6 +42,16 @@ gh variable set DAYOFF_GITOPS_ENABLED --body true --repo OWNER/REPO
 
 The workflow runs containerized checks with generic configuration before restoring private material. It then deploys changes on main or permits a manual deploy/teardown. Manual dispatch defaults to dry run. A single concurrency group serializes deployments. Private files are removed after the job, and bundles are never uploaded as artifacts.
 
+## Reconfigure an existing GitOps installation
+
+Apply calendar and recipient changes locally using `node scripts/configure.ts --calendar-id 'YOUR_STAFF_CALENDAR_ID'` and/or `--management-email 'manager@example.edu'`. Both support `--dry-run`; other settings remain in the private JSON. Update the encrypted configuration secret before the next workflow deployment:
+
+```sh
+gh secret set DAYOFF_CONFIG_JSON --repo OWNER/REPO --env dayoff < local/config.json
+```
+
+Keep `DAYOFF_SEED_JSON` synchronized if an explicitly reviewed import migration changes it. Updating a GitHub secret does not itself deploy; dispatch the deployment workflow or let an enabled main-branch deployment apply it. A local CLI deployment alone does not update the GitHub secret, so an old secret would restore old settings on the next GitOps deployment.
+
 If you prefer workstation-only deployments, leave the variable unset. Source CI still runs. Google OAuth consent or administrator policy changes may require interaction on the trusted workstation before unattended updates can resume.
 
 This repository's workflow supports one personal installation. Coworkers should fork/use their own repository and secrets rather than sharing your credentials or private configuration.

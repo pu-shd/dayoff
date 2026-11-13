@@ -4,6 +4,20 @@ Configuration comes from the file selected by DAYOFF_CONFIG in the environment o
 
 Set the Staff Calendar ID through `node scripts/configure.ts --calendar-id 'YOUR_STAFF_CALENDAR_ID'`, or supply the same flag to `./scripts/bootstrap-local.sh`. Both support `--dry-run`. This updates private configuration while retaining delivery mode, reporting recipients, allowances, and schedules. Run `./scripts/update.sh` to apply changes to the deployed app. Coworkers supply their own ID; no live organizational Calendar ID belongs in the public example.
 
+Set management recipients through `node scripts/configure.ts --management-email 'manager@example.edu'`. Repeat the flag for multiple addresses; the supplied list replaces the previous list. This flag can be used alone, combined with `--calendar-id`, or passed through bootstrap. Use `--dry-run` first, then run the command without it and deploy with `./scripts/update.sh`. None of these configuration commands enables delivery or sends an email.
+
+## Reconfiguration through the CLI
+
+1. Preview a calendar or recipient change with `node scripts/configure.ts ... --dry-run`.
+2. Apply it by repeating that command without `--dry-run`.
+3. For schedules, lunch, holidays, allowances, owner identity, or delivery mode, edit the private JSON selected by `DAYOFF_CONFIG`. The dedicated CLI flags currently cover calendar and management recipients.
+4. Run `./scripts/update.sh --dry-run` to review the deployment operation, then `./scripts/update.sh` to build, validate, push, and update the existing deployment ID.
+5. Refresh the printed canonical web app URL and verify the preview. Configuration changes retain the existing private ledger. Changing the FY on a populated ledger is rejected; use the documented rollover process.
+
+The configuration command's dry run validates input without writing. The deployment script's dry run describes its operations; the actual deployment performs full configuration validation before upload. A successful MailApp test does not automatically enable normal delivery or install reminders. Enable live delivery deliberately after recipient, calendar, schedule, and holiday checks, then enable the reminder trigger in the app.
+
+For teardown, `./scripts/teardown.sh --dry-run` previews the operation and `./scripts/teardown.sh DEPLOYMENT_ID` pushes disabled-delivery source before removing that web deployment. The ledger is retained.
+
 The owner-only MailApp diagnostic can run in preview mode via **Send test email to me**. It sends no attendance information and cannot target management or arbitrary recipients. Check mailbox receipt rather than relying solely on provider acceptance. The Apps Script CLI cannot always invoke functions on a default Cloud project; the authenticated web app is the supported fallback. Calendar and email diagnostics must not create real leave entries.
 
 ## First use

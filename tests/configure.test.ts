@@ -80,3 +80,72 @@ test("configuration follows the environment and data-only .env path", () => {
   );
   assert.notEqual(run(["--calendar-id"], dir).status, 0);
 });
+
+test("management setup replaces recipients without changing calendar or delivery", () => {
+  const dir = mkdtempSync(join(tmpdir(), "dayoff-config-")),
+    file = join(dir, "config.json");
+  const initial = {
+    ...example,
+    calendarId: "existing@example.calendar.google.com",
+  };
+  writeFileSync(file, JSON.stringify(initial));
+  const args = [
+    "--config",
+    file,
+    "--management-email",
+    "manager1@example.edu",
+    "--management-email",
+    "manager2@example.edu",
+  ];
+  for (let i = 0; i < 2; i++) assert.equal(run(args, dir).status, 0);
+  assert.deepEqual(JSON.parse(readFileSync(file, "utf8")), {
+    ...initial,
+    managementEmails: ["manager1@example.edu", "manager2@example.edu"],
+  });
+});
+test("invalid management recipients fail before changing configuration or exposing inputs", () => {
+  const dir = mkdtempSync(join(tmpdir(), "dayoff-config-")),
+    file = join(dir, "config.json");
+  const original = JSON.stringify(example);
+  writeFileSync(file, original);
+  const result = run(
+    ["--config", file, "--management-email", "private-invalid-address"],
+    dir,
+  );
+  assert.notEqual(result.status, 0);
+  assert.equal(readFileSync(file, "utf8"), original);
+  assert.doesNotMatch(result.stderr, /private-invalid-address/);
+  assert.notEqual(
+    run(
+      [
+        "--config",
+        file,
+        "--management-email",
+        "same@example.edu",
+        "--management-email",
+        "same@example.edu",
+      ],
+      dir,
+    ).status,
+    0,
+  );
+});
+test("calendar and management settings can be configured together without writing on dry run", () => {
+  const dir = mkdtempSync(join(tmpdir(), "dayoff-config-")),
+    file = join(dir, "new", "config.json");
+  const args = [
+    "--config",
+    file,
+    "--calendar-id",
+    "staff@example.calendar.google.com",
+    "--management-email",
+    "manager@example.edu",
+  ];
+  assert.equal(run([...args, "--dry-run"], dir).status, 0);
+  assert.equal(existsSync(file), false);
+  assert.equal(run(args, dir).status, 0);
+  const c = JSON.parse(readFileSync(file, "utf8"));
+  assert.equal(c.calendarId, "staff@example.calendar.google.com");
+  assert.deepEqual(c.managementEmails, ["manager@example.edu"]);
+  assert.equal(c.delivery, "disabled");
+});

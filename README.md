@@ -25,7 +25,9 @@ Requirements: macOS with zsh (or zsh on Linux), Node.js 24.11.1+, Docker, `docke
 ```sh
 git clone https://github.com/pu-shd/dayoff.git
 cd dayoff
-./scripts/bootstrap-local.sh --calendar-id 'YOUR_STAFF_CALENDAR_ID'
+./scripts/bootstrap-local.sh \
+  --calendar-id 'YOUR_STAFF_CALENDAR_ID' \
+  --management-email 'manager@example.edu'
 ```
 
 The bootstrap command sets the supplied Calendar ID in private configuration and preserves existing settings when re-run. Review it first with `./scripts/bootstrap-local.sh --calendar-id 'YOUR_STAFF_CALENDAR_ID' --dry-run`. To change the ID later without reinstalling dependencies:
@@ -36,9 +38,19 @@ node scripts/configure.ts --calendar-id 'YOUR_STAFF_CALENDAR_ID'
 ./scripts/update.sh
 ```
 
-The command follows `DAYOFF_CONFIG` in the environment or `.env`, defaulting to `local/config.json`. It also accepts `--config PATH`. Use the Calendar ID from Calendar settings, not a sharing URL. The ID is not printed in logs or written into source files.
+Set or replace management recipients without changing the calendar or delivery mode:
 
-Edit `local/config.json` to configure your **owner email**, **display name**, **managementEmails**, FY, allowances, schedules, holidays, and reminder hour. Every employee can have different management recipients and reporting lines.
+```sh
+node scripts/configure.ts --management-email 'manager@example.edu' --dry-run
+node scripts/configure.ts --management-email 'manager@example.edu'
+./scripts/update.sh
+```
+
+Repeat `--management-email` to supply multiple recipients. Each invocation replaces the entire recipient list; it does not append to the old list. Calendar and management flags can be combined, and bootstrap accepts both flags too.
+
+The command follows `DAYOFF_CONFIG` in the environment or `.env`, defaulting to `local/config.json`. It also accepts `--config PATH`. Use the Calendar ID from Calendar settings, not a sharing URL. Live IDs and recipient addresses are not printed in logs or written into source files.
+
+Edit `local/config.json` to configure your **owner email**, **display name**, FY, allowances, schedules, holidays, and reminder hour. Every employee can have different management recipients and reporting lines. Connection flags preserve these existing settings.
 
 Keep `delivery: "disabled"` for your first trial. All amounts are integer hundredths of an hour: 725 means 7.25 hours and 363 means 3.63 hours. Example schedule transition dates and the lunch window are placeholders; replace them with your actual dates and lunch period.
 

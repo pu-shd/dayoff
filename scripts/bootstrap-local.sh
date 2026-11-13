@@ -6,7 +6,7 @@ dry_run=false
 for arg in "$@"; do
  case "$arg" in
   --dry-run) dry_run=true ;;
-  --help) print "Usage: ./scripts/bootstrap-local.sh [--calendar-id ID] [--dry-run]"; exit 0 ;;
+  --help) print "Usage: ./scripts/bootstrap-local.sh [--calendar-id ID] [--management-email ADDRESS ...] [--dry-run]"; exit 0 ;;
   *) configure_args+=("$arg") ;;
  esac
 done
@@ -15,7 +15,7 @@ if (( ${#configure_args[@]} > 0 )); then
  node scripts/configure.ts "${configure_args[@]}" --dry-run
 fi
 if [[ "$dry_run" == true ]]; then
- print "Would retain/create private local configuration, sync the project Python environment, install locked Node dependencies, and apply the supplied Calendar ID."
+ print "Would retain/create private local configuration, sync the project Python environment, install locked Node dependencies, and apply supplied connection settings."
  exit 0
 fi
 mkdir -p local
