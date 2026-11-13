@@ -53,6 +53,8 @@ Teardown first pushes disabled-delivery source so surviving triggers become iner
 
 For a new fiscal year, create a new instance with confirmed carryover/grants, cap, holiday dates, and schedules. Preserve the previous ledger for reports. Do not merely change the FY on a populated ledger.
 
+Set the annual boundary with `node scripts/configure.ts --fiscal-year-start '07-01'` or the same flag during bootstrap. `07-01` is the default; `MM-DD` must be a date that recurs every year. The FY label denotes the year in which the period ends. Choose another date only for a new instance or a reviewed migration. Migration 003 stores the existing ledger's boundary in Script Properties; a missing legacy setting is treated as July 1. It changes no attendance rows or balances. A workbook import declaring or implicitly using July 1 cannot be combined with another fiscal start.
+
 A successor deploys their own app rather than inheriting OAuth tokens. Transfer a reviewed opening snapshot through normal private channels if needed.
 
 ## CLI limitations

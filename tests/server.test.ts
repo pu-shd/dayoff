@@ -378,7 +378,7 @@ test("migration 002 appends routing without changing balances and never runs on 
   assert.equal(h.rows.length, rows);
   assert.equal(h.properties.get("SCHEMA_VERSION"), "1");
   const after = h.api.initialize(before.nonce);
-  assert.equal(h.properties.get("SCHEMA_VERSION"), "2");
+  assert.equal(h.properties.get("SCHEMA_VERSION"), "3");
   assert.equal(after.records[0].input.emailTo, "management");
   assert.equal(
     after.records[0].emailRecipients?.join(","),
@@ -408,4 +408,16 @@ test("cancellations stay in the CALM correction digest until explicitly confirme
   assert.match(h.mails[0].body, /CORRECT CANCELLED LEAVE/);
   s = h.api.confirmCalm(s.nonce, "request-1234", 3);
   assert.equal(s.reminders.pendingCount, 0);
+});
+
+test("ledger fiscal boundaries are stored and protected independently of its year label", () => {
+  const h = harness();
+  const s = h.init();
+  assert.deepEqual(JSON.parse(JSON.stringify(s.fiscalPeriod)), {
+    start: "2026-07-01",
+    end: "2027-06-30",
+  });
+  assert.equal(h.properties.get("FISCAL_YEAR_START"), "07-01");
+  h.properties.set("FISCAL_YEAR_START", "10-01");
+  assert.throws(() => h.api.getDashboard(), /fiscal-year start/);
 });

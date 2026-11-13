@@ -9,6 +9,7 @@ export interface Schedule {
 }
 export interface Config {
   fiscalYear: number;
+  fiscalYearStart?: string;
   timeZone: string;
   displayName: string;
   ownerEmail: string;
@@ -90,6 +91,20 @@ export function plusDays(value: string, count: number): string {
     .toISOString()
     .slice(0, 10);
 }
+export function fiscalBounds(
+  c: Pick<Config, "fiscalYear" | "fiscalYearStart">,
+) {
+  const startDate = c.fiscalYearStart ?? "07-01";
+  invariant(
+    /^\d{2}-\d{2}$/.test(startDate) && dateValid("2001-" + startDate),
+    "Invalid fiscal-year start; use an annual MM-DD date.",
+  );
+  const startYear = c.fiscalYear - (startDate === "01-01" ? 0 : 1);
+  return {
+    start: startYear + "-" + startDate,
+    end: plusDays(startYear + 1 + "-" + startDate, -1),
+  };
+}
 export function validateConfig(c: Config): Config {
   invariant(
     c &&
@@ -98,6 +113,7 @@ export function validateConfig(c: Config): Config {
       c.fiscalYear <= 2200,
     "Invalid fiscal year.",
   );
+  const fiscal = fiscalBounds(c);
   try {
     new Intl.DateTimeFormat("en-US", { timeZone: c.timeZone });
   } catch {
@@ -155,7 +171,7 @@ export function validateConfig(c: Config): Config {
     );
   }
   invariant(
-    c.schedules.some((s) => s.effective <= c.fiscalYear - 1 + "-07-01"),
+    c.schedules.some((s) => s.effective <= fiscal.start),
     "Schedule must cover the fiscal year start.",
   );
   invariant(
@@ -172,6 +188,7 @@ export function scheduleOn(c: Config, date: string): Schedule {
   return s;
 }
 export function createDays(c: Config, input: Input): Day[] {
+  const fiscal = fiscalBounds(c);
   invariant(
     input && /^[a-zA-Z0-9-]{8,80}$/.test(input.id),
     "Invalid request ID.",
@@ -196,8 +213,7 @@ export function createDays(c: Config, input: Input): Day[] {
     "Invalid date range.",
   );
   invariant(
-    input.first >= c.fiscalYear - 1 + "-07-01" &&
-      input.last <= c.fiscalYear + "-06-30",
+    input.first >= fiscal.start && input.last <= fiscal.end,
     "Dates must fall within the configured fiscal year.",
   );
   const days: Day[] = [];
@@ -258,14 +274,16 @@ export function report(c: Config, records: RecordEntry[], today: string) {
   let vacation = c.policy.openingVacation,
     projected = vacation;
   const monthly = [];
-  for (let i = 0; i < 12; i++) {
-    const year = c.fiscalYear - 1 + Math.floor((6 + i) / 12),
-      month = ((6 + i) % 12) + 1;
-    const first = year + "-" + String(month).padStart(2, "0") + "-01";
-    const end = plusDays(
+  const fiscal = fiscalBounds(c);
+  for (let cursor = fiscal.start.slice(0, 7) + "-01"; cursor <= fiscal.end; ) {
+    const year = Number(cursor.slice(0, 4)),
+      month = Number(cursor.slice(5, 7));
+    const first = cursor < fiscal.start ? fiscal.start : cursor;
+    const monthEnd = plusDays(
       new Date(Date.UTC(year, month, 1)).toISOString().slice(0, 10),
       -1,
     );
+    const end = monthEnd > fiscal.end ? fiscal.end : monthEnd;
     const charges = active
       .flatMap((r) => r.days.map((d) => ({ ...d, category: r.input.category })))
       .filter((d) => d.date >= first && d.date <= end);
@@ -274,15 +292,17 @@ export function report(c: Config, records: RecordEntry[], today: string) {
     const taken = charges
       .filter((d) => d.category === "vacation")
       .reduce((n, d) => n + d.hours, 0);
-    projected = Math.min(
-      c.policy.vacationCap,
-      projected - taken + c.policy.vacationMonthly,
-    );
+    projected -= taken;
+    if (monthEnd <= fiscal.end)
+      projected = Math.min(
+        c.policy.vacationCap,
+        projected + c.policy.vacationMonthly,
+      );
     if (first <= today) {
       vacation -= charges
         .filter((d) => d.category === "vacation" && d.date <= today)
         .reduce((n, d) => n + d.hours, 0);
-      if (end <= today)
+      if (monthEnd <= today && monthEnd <= fiscal.end)
         vacation = Math.min(
           c.policy.vacationCap,
           vacation + c.policy.vacationMonthly,
@@ -293,6 +313,7 @@ export function report(c: Config, records: RecordEntry[], today: string) {
       vacationTaken: taken,
       projectedVacation: projected,
     });
+    cursor = plusDays(monthEnd, 1);
   }
   return {
     used,

@@ -8,9 +8,10 @@ async function main() {
     path: string | undefined,
     dry = false;
   const recipients: string[] = [];
+  let fiscalStart: string | undefined;
   if (args.includes("--help")) {
     console.log(
-      "Usage: node scripts/configure.ts [--calendar-id ID] [--management-email ADDRESS ...] [--config PATH] [--dry-run]",
+      "Usage: node scripts/configure.ts [--calendar-id ID] [--management-email ADDRESS ...] [--fiscal-year-start MM-DD] [--config PATH] [--dry-run]",
     );
     return;
   }
@@ -23,6 +24,7 @@ async function main() {
     if (
       flag !== "--calendar-id" &&
       flag !== "--management-email" &&
+      flag !== "--fiscal-year-start" &&
       flag !== "--config"
     )
       throw Error("Unknown configuration option.");
@@ -32,6 +34,9 @@ async function main() {
     if (flag === "--calendar-id") {
       if (calendar) throw Error("Supply one calendar ID.");
       calendar = value;
+    } else if (flag === "--fiscal-year-start") {
+      if (fiscalStart) throw Error("Supply one fiscal-year start.");
+      fiscalStart = value;
     } else if (flag === "--management-email") {
       recipients.push(value);
     } else {
@@ -44,8 +49,18 @@ async function main() {
     !/^[A-Za-z0-9_.+%=-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(calendar)
   )
     throw Error("Supply a valid Calendar ID, not a calendar URL.");
-  if (!calendar && !recipients.length)
-    throw Error("Supply --calendar-id or --management-email.");
+  if (
+    fiscalStart &&
+    (!/^\d{2}-\d{2}$/.test(fiscalStart) ||
+      Number.isNaN(Date.parse("2001-" + fiscalStart)) ||
+      new Date("2001-" + fiscalStart).toISOString().slice(5, 10) !==
+        fiscalStart)
+  )
+    throw Error("Supply a valid annual fiscal-year start in MM-DD format.");
+  if (!calendar && !recipients.length && !fiscalStart)
+    throw Error(
+      "Supply --calendar-id, --management-email, or --fiscal-year-start.",
+    );
   if (
     recipients.some(
       (email) => !/^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/.test(email),
@@ -77,6 +92,7 @@ async function main() {
     throw Error("Configuration must be a JSON object.");
   const updated = {
     ...data,
+    ...(fiscalStart ? { fiscalYearStart: fiscalStart } : {}),
     ...(calendar ? { calendarId: calendar } : {}),
     ...(recipients.length ? { managementEmails: recipients } : {}),
   };

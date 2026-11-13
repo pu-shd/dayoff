@@ -7,7 +7,7 @@ This is a small Google Apps Script web app. Each employee deploys an **owner-onl
 ## Features
 
 - Full days, fixed-charge half days, and partial days with lunch overlap deducted.
-- Effective-dated schedules, holidays, and July–June fiscal years.
+- Effective-dated schedules, holidays, and configurable fiscal years (July–June by default).
 - Monthly capped vacation accrual; sick and personal allowances.
 - Separate used, planned, currently available, and projected balances.
 - Standard calendar titles, absence intervals, hours, and CALM status in notes.
@@ -53,6 +53,10 @@ The command follows `DAYOFF_CONFIG` in the environment or `.env`, defaulting to 
 Edit `local/config.json` to configure your **owner email**, **display name**, FY, allowances, schedules, holidays, and reminder hour. Every employee can have different management recipients and reporting lines. Connection flags preserve these existing settings.
 
 Keep `delivery: "disabled"` for your first trial. All amounts are integer hundredths of an hour: 725 means 7.25 hours and 363 means 3.63 hours. Example schedule transition dates and the lunch window are placeholders; replace them with your actual dates and lunch period.
+
+The annual rollover date defaults to July 1 and is configurable as `fiscalYearStart` in `MM-DD` format. Set it during setup with `--fiscal-year-start '07-01'`, which works with both bootstrap and `node scripts/configure.ts`. For example, `10-01` gives FY2027 the period October 1, 2026–September 30, 2027; `01-01` makes FY2027 the 2027 calendar year. Date inputs, validation, and balance reports follow this setting. Monthly accrual still posts at calendar month-end.
+
+Choose the date before initializing a ledger. An initialized ledger retains its fiscal boundaries. Annual rollover remains an explicit new-year setup with reviewed carryover; changing the configured date does not move existing records or automatically open another year. The legacy workbook importer supports its July–June layout and rejects a conflicting fiscal start at build time.
 
 Optional workbook import:
 

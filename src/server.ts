@@ -1,5 +1,6 @@
 import {
   validateConfig,
+  fiscalBounds,
   report,
   hoursText,
   managementMessage,
@@ -20,7 +21,7 @@ declare const DAYOFF_SEED: {
   records: RecordEntry[];
   warnings?: string[];
 };
-const SCHEMA = 2;
+const SCHEMA = 3;
 function config(): Config {
   return validateConfig({
     ...DAYOFF_CONFIG,
@@ -39,6 +40,12 @@ function actor(): Config {
     !storedYear || storedYear === String(c.fiscalYear),
     "This ledger belongs to another fiscal year. Create a new instance for rollover.",
   );
+  invariant(
+    !props().getProperty("LEDGER_ID") ||
+      (props().getProperty("FISCAL_YEAR_START") ?? "07-01") ===
+        (c.fiscalYearStart ?? "07-01"),
+    "This ledger uses another fiscal-year start. Create a new instance or a reviewed migration.",
+  );
   return c;
 }
 function props() {
@@ -49,7 +56,7 @@ function store() {
   invariant(id, "Initialize your private ledger first.");
   const book = SpreadsheetApp.openById(id);
   invariant(
-    ["1", "2"].includes(props().getProperty("SCHEMA_VERSION") || ""),
+    ["1", "2", "3"].includes(props().getProperty("SCHEMA_VERSION") || ""),
     "Unsupported ledger schema. Apply a versioned migration.",
   );
   const sheet = book.getSheetByName("Journal");
@@ -77,13 +84,16 @@ function migrate(c: Config) {
   )
     return;
   invariant(
-    props().getProperty("SCHEMA_VERSION") === "1",
+    ["1", "2"].includes(props().getProperty("SCHEMA_VERSION") || ""),
     "Unsupported ledger schema.",
   );
-  for (const r of list()) {
-    const upgraded = migration002(r, c);
-    if (upgraded !== r) save(upgraded);
-  }
+  if (props().getProperty("SCHEMA_VERSION") === "1")
+    for (const r of list()) {
+      const upgraded = migration002(r, c);
+      if (upgraded !== r) save(upgraded);
+    }
+  // Migration 003 fixes the ledger's annual boundary without changing journal rows.
+  props().setProperty("FISCAL_YEAR_START", c.fiscalYearStart ?? "07-01");
   props().setProperty("SCHEMA_VERSION", String(SCHEMA));
 }
 function locked<T>(fn: () => T): T {
@@ -205,6 +215,7 @@ function dashboard(c: Config) {
     initialized,
     nonce: nonce(),
     config: { ...c },
+    fiscalPeriod: fiscalBounds(c),
     records,
     totals: report(c, records, today),
     today,
@@ -252,6 +263,7 @@ function initialize(token: string) {
           LEDGER_ID: book.getId(),
           SCHEMA_VERSION: String(SCHEMA),
           FISCAL_YEAR: String(c.fiscalYear),
+          FISCAL_YEAR_START: c.fiscalYearStart ?? "07-01",
         });
       }
       const ids = new Set(list().map((r) => r.id));

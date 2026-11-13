@@ -32,6 +32,7 @@ class ImportTests(unittest.TestCase):
 
     def test_explicit_year_overrides_stale_header_and_preserves_rounded_totals(self):
         result = module.convert(self.cells(), 2027)
+        self.assertEqual(result["fiscalYearStart"], "07-01")
         self.assertEqual(result["records"][0]["days"][0]["date"], "2026-07-31")
         self.assertEqual(result["records"][0]["days"][0]["hours"], 1088)
         self.assertEqual(result["records"][0]["calm"], "historical")

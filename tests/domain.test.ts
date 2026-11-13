@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
   createDays,
+  fiscalBounds,
   validateConfig,
   report,
   title,
@@ -144,4 +145,52 @@ test("management email never claims pending CALM is entered; CSV blocks formulas
   r.calm = "entered";
   assert.match(managementMessage(cfg, r).body, /I entered/);
   assert.equal(csvCell('=IMPORTDATA("x")'), '"\'=IMPORTDATA(""x"")"');
+});
+
+test("fiscal start defaults to July 1 and supports calendar and other fiscal years", () => {
+  assert.deepEqual(fiscalBounds(cfg), {
+    start: "2026-07-01",
+    end: "2027-06-30",
+  });
+  assert.deepEqual(fiscalBounds({ ...cfg, fiscalYearStart: "01-01" }), {
+    start: "2027-01-01",
+    end: "2027-12-31",
+  });
+  const c = { ...cfg, fiscalYearStart: "10-01" };
+  assert.deepEqual(fiscalBounds(c), { start: "2026-10-01", end: "2027-09-30" });
+  assert.throws(
+    () =>
+      createDays(c, {
+        ...record().input,
+        first: "2026-09-30",
+        last: "2026-09-30",
+      }),
+    /fiscal year/,
+  );
+  assert.equal(
+    createDays(c, {
+      ...record().input,
+      first: "2027-09-30",
+      last: "2027-09-30",
+    })[0].hours,
+    725,
+  );
+  assert.throws(
+    () => validateConfig({ ...cfg, fiscalYearStart: "02-29" }),
+    /fiscal/,
+  );
+});
+test("custom fiscal periods credit twelve month ends and clip partial boundary months", () => {
+  const c = { ...cfg, fiscalYearStart: "07-15" };
+  const r = record();
+  const result = report(c, [r], "2027-07-14");
+  assert.equal(result.monthly.length, 13);
+  assert.equal(result.projected.vacation, 12 * 1450 - 725);
+  const january = report(
+    { ...cfg, fiscalYearStart: "01-01" },
+    [],
+    "2027-12-31",
+  );
+  assert.equal(january.projected.vacation, 12 * 1450);
+  assert.equal(january.monthly[0].month, "2027-01");
 });

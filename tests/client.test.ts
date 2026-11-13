@@ -57,6 +57,7 @@ function harness(records: RecordEntry[] = [], focus = { id: "", version: "" }) {
   });
   const calls: { name: string; args: unknown[] }[] = [];
   const state = {
+    fiscalPeriod: { start: "2026-07-01", end: "2027-06-30" },
     initialized: true,
     nonce: "test-nonce",
     config: cfg,

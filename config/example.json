@@ -1,5 +1,6 @@
 {
   "fiscalYear": 2027,
+  "fiscalYearStart": "07-01",
   "timeZone": "America/New_York",
   "displayName": "Your first name",
   "ownerEmail": "you@example.edu",

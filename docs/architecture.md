@@ -14,7 +14,11 @@ Amounts are integer hundredths of an hour. Partial working minutes round to the 
 
 New requests persist their email choice (self, management, or none) and a recipient snapshot. Migration 002 appends routing metadata to older snapshots on the first authorized mutation or scheduled reminder run. GET and preview do not migrate the journal. Original rows, hours, dates, CALM state, and balances remain intact; retries skip already-upgraded snapshots.
 
-Earlier versions sent every request to management and did not store recipient snapshots. Their migration records management routing with the management list configured at upgrade time. Imported monthly summaries receive no-email routing. New requests default to self. The sheet columns remain unchanged; the schema version advances to 2 only after all upgrade snapshots are appended.
+Earlier versions sent every request to management and did not store recipient snapshots. Their migration records management routing with the management list configured at upgrade time. Imported monthly summaries receive no-email routing. New requests default to self. The sheet columns remain unchanged; routing snapshots are appended before the schema version advances.
+
+## Migration 003: fiscal boundaries
+
+Migration 003 records the fiscal-year start in Script Properties and advances the schema version to 3. Existing ledgers default to July 1. Fiscal dates are configurable at setup and protected thereafter, alongside the year label. Date validation, date-picker limits, and reports derive from the same fiscal-boundary helper. Non-month-start boundaries clip the first/last reporting months, while monthly vacation accrual remains on calendar month ends.
 
 ## External effects and recovery
 

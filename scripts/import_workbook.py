@@ -114,7 +114,13 @@ def convert(cells: dict[str, str], year: int) -> dict:
             raise ValueError(
                 f"The {category} monthly totals do not match the cached annual total. Recalculate the workbook."
             )
-    return {"fiscalYear": year, "policy": policy, "records": records, "warnings": warnings}
+    return {
+        "fiscalYear": year,
+        "fiscalYearStart": "07-01",
+        "policy": policy,
+        "records": records,
+        "warnings": warnings,
+    }
 
 
 def main() -> None:

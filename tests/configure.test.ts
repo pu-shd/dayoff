@@ -149,3 +149,20 @@ test("calendar and management settings can be configured together without writin
   assert.deepEqual(c.managementEmails, ["manager@example.edu"]);
   assert.equal(c.delivery, "disabled");
 });
+
+test("fiscal-year start is configurable through setup and invalid dates never overwrite settings", () => {
+  const dir = mkdtempSync(join(tmpdir(), "dayoff-config-")),
+    file = join(dir, "config.json");
+  writeFileSync(file, JSON.stringify(example));
+  assert.equal(
+    run(["--config", file, "--fiscal-year-start", "10-01"], dir).status,
+    0,
+  );
+  const saved = readFileSync(file, "utf8");
+  assert.equal(JSON.parse(saved).fiscalYearStart, "10-01");
+  assert.notEqual(
+    run(["--config", file, "--fiscal-year-start", "02-30"], dir).status,
+    0,
+  );
+  assert.equal(readFileSync(file, "utf8"), saved);
+});

@@ -23,6 +23,11 @@ if (seedPath && !existsSync(seedPath))
   );
 if (seed.fiscalYear && seed.fiscalYear !== config.fiscalYear)
   throw Error("Import and configuration fiscal years differ.");
+if (
+  seed.records?.length &&
+  (seed.fiscalYearStart ?? "07-01") !== (config.fiscalYearStart ?? "07-01")
+)
+  throw Error("Workbook import and configuration fiscal-year starts differ.");
 const domain = await build({
   entryPoints: ["src/domain.ts"],
   bundle: true,

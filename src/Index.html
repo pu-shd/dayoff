@@ -764,7 +764,7 @@
         row.append(controls);tbody.append(row);
        }
        const first=document.querySelector('[name=first]'),last=document.querySelector('[name=last]');
-       first.min=last.min=(s.config.fiscalYear-1)+'-07-01';first.max=last.max=s.config.fiscalYear+'-06-30';
+       first.min=last.min=s.fiscalPeriod.start;first.max=last.max=s.fiscalPeriod.end;
        enabled();
       }
       function invalidate(){pendingInput=null;$('preview').classList.add('hide');}
