@@ -680,10 +680,10 @@
           <section id="preview" class="hide" aria-label="Request preview">
             <div class="preview-top">
               <div>
-                <p class="eyebrow">Review before saving</p>
+                <p class="eyebrow" id="preview-eyebrow">Review before saving</p>
                 <h3 id="preview-title"></h3>
                 <p id="preview-date" class="muted"></p>
-                <span class="badge">Not submitted</span>
+                <span class="badge" id="preview-status">Not submitted</span>
               </div>
               <div class="hours-total">
                 <strong id="preview-hours"></strong><span>hours of leave</span
@@ -732,6 +732,13 @@
             </div>
             <div class="preview-footer">
               <button id="send">Save request &amp; email me</button>
+              <div
+                id="request-save-status"
+                class="status hide"
+                role="status"
+                aria-live="polite"
+                aria-atomic="true"
+              ></div>
               <p id="preview-save-note" class="muted">
                 Saving records these hours and creates the real Staff Calendar
                 entry.
@@ -893,7 +900,7 @@
     <script>
       'use strict';
       const focus = <?!= focus ?>;
-      let state, pendingInput, historyYear, historyKey, historyLoad = 0, working = false, hasError = false;
+      let state, pendingInput, historyYear, historyKey, historyLoad = 0, working = false, hasError = false, savedPreview = false;
       const $ = id => document.getElementById(id);
       const money = n => (n / 100).toFixed(2);
       const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
@@ -905,8 +912,24 @@
        $('mode').classList.toggle('error',hasError);
       }
       function message(value,error=false) { hasError=error;$('message').textContent=value;$('message').className='status'+(error?' error':'')+(value?'':' hide');renderMode(); }
+      function newFeedback() {const node=text('div','','status hide');node.setAttribute('data-action-feedback','');node.setAttribute('role','status');node.setAttribute('aria-live','polite');node.setAttribute('aria-atomic','true');return node;}
+      function feedbackIn(parent) {let node=[...parent.children].find(n=>n.hasAttribute('data-action-feedback'));if(!node){node=newFeedback();parent.append(node);}return node;}
+      function feedbackAfter(anchor) {let node=anchor.nextElementSibling;if(!node?.hasAttribute('data-action-feedback')){node=newFeedback();anchor.after(node);}return node;}
+      function feedbackAt(trigger) {
+       if(trigger.id==='send')return ()=>$('request-save-status');
+       if(trigger.id==='initialize')return ()=>feedbackAfter($('cards'));
+       const record=trigger.closest('[data-record-id]'),day=trigger.closest('[data-date]');
+       if(record){const id=record.dataset.recordId,date=day?.dataset.date,section=record.closest('section');return ()=>{const row=$('record-'+id),target=date?[...row?.querySelectorAll('[data-date]')??[]].find(n=>n.dataset.date===date):row;return feedbackIn(target?.lastElementChild||section);};}
+       const item=trigger.closest('.queue-item');
+       if(item){const id=item.id,index=[...$('calm-queue').querySelectorAll('.queue-item')].indexOf(item);return ()=>{const current=$(id);if(current)return feedbackAfter(current.querySelector('.actions'));const queue=$('calm-queue'),node=newFeedback();queue.insertBefore(node,queue.children[index]||null);return node;};}
+       const anchor=trigger.closest('.actions')||trigger.closest('label')||trigger,section=trigger.closest('section,#setup,#history-section')||document.querySelector('main');
+       return ()=>anchor.isConnected?feedbackAfter(anchor):feedbackIn(section);
+      }
+      function clearFeedback(feedback) {const node=feedback();node.textContent='';node.classList.add('hide');}
+      function notify(feedback,value,error=false) {const node=feedback();message('',error);node.textContent=value;node.className='status'+(error?' error':'');node.closest('details')?.setAttribute('open','');node.scrollIntoView?.({block:'nearest',inline:'nearest'});}
       function enabled() {
        document.querySelectorAll('button').forEach(b=>b.disabled=working);
+       $('email-choice').disabled=working||savedPreview;
        if (!state || working) return;
        const live = state.config.delivery==='google';
        $('install').disabled=!live; $('stop').disabled=!state.reminders.enabled;
@@ -915,11 +938,11 @@
        updateRows();
       }
       function busy(value) { working=value;renderMode();enabled(); }
-      async function action(name,...args) {
-       busy(true);
-       try { const next=await rpc(name,state.nonce,...args); render(next); message(next.notice || 'Saved.'); return true; }
-       catch(e) { message(e.message || 'Unable to complete the action.',true); try {render(await rpc('getDashboard'));} catch { /* Keep the original error visible. */ } return false; }
-       finally {busy(false);}
+      async function action(name,trigger,...args) {
+       const feedback=feedbackAt(trigger);clearFeedback(feedback);busy(true);
+       try {const next=await rpc(name,state.nonce,...args);render(next);notify(feedback,next.notice||'Saved.');return true;}
+       catch(e){try{render(await rpc('getDashboard'));}catch{/* Keep the original error. */}notify(feedback,e.message||'Unable to complete the action.',true);return false;}
+       finally{busy(false);}
       }
       function text(tag,value,cls) {const node=document.createElement(tag);node.textContent=value;if(cls)node.className=cls;return node;}
       function statDetails(label,value) {const details=document.createElement('details');details.append(text('summary',label),text('small',value));return details;}
@@ -931,12 +954,13 @@
        return spans.map(span=>format(span[0].date)+(span.length>1?' – '+format(span.at(-1).date):'')).join(', ');
       }
       function range(r) {return dateList(activeDays(r).length?activeDays(r):r.days);}
-      function confirmEntry(r) {
+      function confirmEntry(r,trigger) {
        const correction=r.calm==='correction';
        if(confirm((correction?'Have you corrected the cancelled leave':'Have you entered this leave')+' in CALM?\n\n'+dateList(calmDays(r))+'\n'+cap(r.input.category)+' · '+money(calmDays(r).reduce((n,d)=>n+d.hours,0))+' hours'))
-        action('confirmCalm',r.id,r.version);
+        action('confirmCalm',trigger,r.id,r.version);
       }
       function renderPreview(r) {
+       savedPreview=false;clearFeedback(feedbackAt($('send')));$('preview-status').textContent='Not submitted';$('preview-eyebrow').textContent='Review before saving';$('preview-save-note').classList.remove('hide');
        $('preview').setAttribute('data-category',r.input.category);
        $('preview-title').textContent=cap(r.input.category)+' leave';
        $('preview-date').textContent=range(r);
@@ -987,7 +1011,7 @@
         $('history-unmapped').textContent=y.unmapped.length?'Unmapped cells (invalid calendar dates): '+y.unmapped.map(e=>e.cell+' = '+e.mark).join(' · '):'';
         const r=y.reconciliation;
         $('history-reconciliation').textContent=r.followingYear?'Carryover to FY'+r.followingYear+': '+['vacation','sick'].map(c=>cap(c)+' '+r[c].status+(r[c].backwardConstraint==='at-least'?' (carry cap prevents a unique reverse balance)':'')).join(' · ')+'. Source balances are retained.':y.fiscalYear===state.history.anchorFiscalYear?'This workbook anchors the collation. Its source figures remain separate from your live balances.':'No adjacent following-year source is available for carryover reconciliation.';
-       } catch(e){if(request===historyLoad)message(e.message,true);}
+       } catch(e){if(request===historyLoad)notify(feedbackAt($('history-year')),e.message,true);}
        finally{if(request===historyLoad)$('history-year').disabled=false;}
       }
       function renderHistory(h) {
@@ -1019,7 +1043,7 @@
         const item=text('article','','queue-item'+(r.calm==='correction'?' correction':''));item.id='calm-'+r.id;item.setAttribute('data-category',r.input.category);
         const top=text('div','','queue-top');top.append(text('h3',cap(r.input.category)+' · '+money(days.reduce((n,d)=>n+d.hours,0))+' hours'),text('span',r.calm==='correction'?'Correction needed':'Entry needed','badge'));
         item.append(top,text('p',dateList(days)),text('p',days.map(d=>d.date+' · '+money(d.hours)+' h').join(' / '),'muted'));
-        const controls=text('div','','actions');controls.append(button(r.calm==='correction'?'Confirm CALM corrected':'Confirm entered in CALM',()=>confirmEntry(r)));item.append(controls);$('calm-queue').append(item);
+        const controls=text('div','','actions');controls.append(button(r.calm==='correction'?'Confirm CALM corrected':'Confirm entered in CALM',event=>confirmEntry(r,event.currentTarget)));item.append(controls);$('calm-queue').append(item);
         if(focus.id===r.id)item.classList.add('focus');
        }
        $('focus-notice').classList.add('hide');
@@ -1035,7 +1059,7 @@
        $('install').textContent=s.reminders.enabled?'Update reminder schedule':'Enable weekday reminders';
        const tbody=$('records'),expanded=new Set([...tbody.querySelectorAll('details[open]')].map(node=>node.dataset.requestId));tbody.replaceChildren();
        for(const r of [...s.records].sort((a,b)=>b.days[0].date.localeCompare(a.days[0].date))){
-        const remaining=activeDays(r),row=document.createElement('tr');row.setAttribute('data-category',r.input.category);
+        const remaining=activeDays(r),row=document.createElement('tr');row.setAttribute('data-category',r.input.category);row.dataset.recordId=r.id;row.id='record-'+r.id;
         const dateCell=document.createElement('td');
         if(r.legacy){const details=document.createElement('details');details.className='record-dates';details.append(text('summary',r.days[0].date.slice(0,7)+' (monthly)'),text('p','Imported month-end posting: '+r.days[0].date+'. Exact daily charges cannot be inferred from this monthly total. See Attendance History for original daily markings.','muted'));dateCell.append(details);}
         else {
@@ -1049,7 +1073,7 @@
           const calm=removed?(r.calm==='correction' && calmDays(r).some(x=>x.date===d.date)?'correction':'no outstanding action'):r.calm==='correction'?'entered':r.calm;
           dayRow.append(text('td',d.date+(removed?' · removed':'')),text('td',money(d.hours)),text('td',calm));
           const controls=document.createElement('td');
-          if(!removed)controls.append(button('Remove date',()=>{if(confirm('Remove '+date(d.date)+' ('+money(d.hours)+' hours) from this request? Other dates stay in place. Correct CALM if it was already entered.'))action('removeRequestDate',r.id,r.version,d.date);},'danger'));
+          if(!removed)controls.append(button('Remove date',event=>{if(confirm('Remove '+date(d.date)+' ('+money(d.hours)+' hours) from this request? Other dates stay in place. Correct CALM if it was already entered.'))action('removeRequestDate',event.currentTarget,r.id,r.version,d.date);},'danger'));
           dayRow.append(controls);body.append(dayRow);
          }
          table.append(body);wrap.append(table);details.append(wrap);dateCell.append(details);
@@ -1058,10 +1082,10 @@
         row.append(text('td',r.legacy?'Historical; CALM unverified':'CALM: '+r.calm+' · Calendar: '+r.calendar+' · Email: '+r.email));
         const controls=document.createElement('td');
         if(!r.legacy){
-         if(outstanding(r))controls.append(button(r.calm==='correction'?'Confirm CALM corrected':'Confirm request entered in CALM',()=>confirmEntry(r)));
-         if(r.calendar==='pending'||r.email==='pending')controls.append(button('Retry incomplete steps',()=>action('retryRequest',r.id)));
-         if(r.email==='unknown'||r.email==='sending')controls.append(button('Confirm email received',()=>{if(confirm('Confirm receipt or an administrator-verified delivery trace.'))action('resolveEmail',r.id,r.version,true);}));
-         if(remaining.length)controls.append(button('Cancel all remaining dates',()=>{if(confirm('Cancel all remaining dates in this request and remove their Calendar events? Any CALM corrections stay on your checklist.'))action('cancelRequest',r.id,r.version);},'danger'));
+         if(outstanding(r))controls.append(button(r.calm==='correction'?'Confirm CALM corrected':'Confirm request entered in CALM',event=>confirmEntry(r,event.currentTarget)));
+         if(r.calendar==='pending'||r.email==='pending')controls.append(button('Retry incomplete steps',event=>action('retryRequest',event.currentTarget,r.id)));
+         if(r.email==='unknown'||r.email==='sending')controls.append(button('Confirm email received',event=>{if(confirm('Confirm receipt or an administrator-verified delivery trace.'))action('resolveEmail',event.currentTarget,r.id,r.version,true);}));
+         if(remaining.length)controls.append(button('Cancel all remaining dates',event=>{if(confirm('Cancel all remaining dates in this request and remove their Calendar events? Any CALM corrections stay on your checklist.'))action('cancelRequest',event.currentTarget,r.id,r.version);},'danger'));
         }
         row.append(controls);tbody.append(row);
        }
@@ -1069,7 +1093,7 @@
        renderHistory(s.history);
        enabled();
       }
-      function invalidate(){pendingInput=null;$('preview').classList.add('hide');}
+      function invalidate(){if(savedPreview){$('email-choice').value='self';savedPreview=false;}pendingInput=null;$('preview').classList.add('hide');clearFeedback(feedbackAt($('send')));enabled();}
       const dateRows=()=>[...$('date-rows').querySelectorAll('.date-row')];
       function updateRows(){
        const rows=dateRows();$('add-dates').disabled=working || rows.length>=32;
@@ -1097,34 +1121,36 @@
       function rowInput(row){if(!row.querySelector('[name=last]').value)defaultLastDate(row);return Object.fromEntries([...row.querySelectorAll('[name]')].map(field=>[field.name,field.value]));}
       $('request-form').addEventListener('input',invalidate);
       $('request-form').addEventListener('submit',async e=>{
-       e.preventDefault();busy(true);
+       e.preventDefault();const feedback=feedbackAt(document.querySelector('#request-form button[type=submit]'));clearFeedback(feedback);if(savedPreview)$('email-choice').value='self';busy(true);
        const ranges=dateRows().map(rowInput);pendingInput={...ranges[0],ranges,category:document.querySelector('[name=category]').value,id:crypto.randomUUID(),emailTo:$('email-choice').value};
        try{renderPreview(await rpc('preview',pendingInput));message('');}
-       catch(err){message(err.message,true);invalidate();}finally{busy(false);}
+       catch(err){invalidate();notify(feedback,err.message,true);}finally{busy(false);}
       });
       $('email-choice').addEventListener('change',async()=>{
        if(!pendingInput)return;busy(true);pendingInput.emailTo=$('email-choice').value;
-       try{renderPreview(await rpc('preview',pendingInput));}catch(e){message(e.message,true);invalidate();}finally{busy(false);}
+       try{renderPreview(await rpc('preview',pendingInput));}catch(e){invalidate();notify(feedbackAt(document.querySelector('#request-form button[type=submit]')),e.message,true);}finally{busy(false);}
       });
-      $('send').addEventListener('click',async()=>{
-       if(!pendingInput)return;const id=pendingInput.id;
-       const ok=await action('createRequest',pendingInput);
-       if(ok || state.records.some(r=>r.id===id)){invalidate();$('email-choice').value='self';}
-       if(ok)message('Request saved and Calendar updated. '+(state.records.find(r=>r.id===id)?.email==='skipped'?'No request email was sent.':'Your chosen request email was sent.')+' CALM entry remains on your checklist.');
+      $('send').addEventListener('click',async event=>{
+       if(!pendingInput)return;const id=pendingInput.id,trigger=event.currentTarget;
+       const ok=await action('createRequest',trigger,pendingInput);
+       if(ok || state.records.some(r=>r.id===id)){
+        pendingInput=null;savedPreview=true;$('preview').classList.remove('hide');$('preview-status').textContent=ok?'Saved':'Action needed';$('preview-eyebrow').textContent=ok?'Saved request':'Recorded request';$('send').textContent=ok?'Request saved':'Request recorded';$('preview-save-note').classList.add('hide');enabled();
+       }
+       if(ok)notify(feedbackAt(trigger),'Request saved and Calendar updated. '+(state.records.find(r=>r.id===id)?.email==='skipped'?'No request email was sent.':'Your chosen request email was sent.')+' CALM entry remains on your checklist.');
       });
-      $('import-history').addEventListener('click',()=>action('importHistory'));
+      $('import-history').addEventListener('click',event=>action('importHistory',event.currentTarget));
       $('history-year').addEventListener('change',()=>loadHistory(Number($('history-year').value)));
       $('history-export').addEventListener('click',()=>{if(!historyYear)return;const y=historyYear,rows=['month,vacation_used_hours,sick_used_hours,personal_used_hours,vacation_closing_hours,sick_closing_hours,personal_closing_hours'];for(const m of y.months)rows.push([m.month,...['vacation','sick','personal'].map(c=>money(m[c])),...['vacation','sick','personal'].map(c=>m.balances[c]===null?'':money(m.balances[c]))].join(','));rows.push(['annual_used',...['vacation','sick','personal'].map(c=>money(y.totals[c])),'','',''].join(','));download('dayoff-history-FY'+y.fiscalYear+'.csv',rows.join('\r\n'));});
-      $('initialize').addEventListener('click',()=>action('initialize'));
-      $('install').addEventListener('click',()=>action('saveReminders',Number($('reminder-hour').value),true));
-      $('stop').addEventListener('click',()=>action('stopReminders'));
-      $('send-now').addEventListener('click',()=>action('sendReminderNow'));
-      $('test-mail').addEventListener('click',async()=>{
-       busy(true);try{const result=await rpc('testMail',state.nonce);message('Google MailApp accepted the test. Check your inbox and junk folder. Reference: '+result.reference);}
-       catch(e){message(e.message,true);}finally{try{render(await rpc('getDashboard'));}finally{busy(false);}}
+      $('initialize').addEventListener('click',event=>action('initialize',event.currentTarget));
+      $('install').addEventListener('click',event=>action('saveReminders',event.currentTarget,Number($('reminder-hour').value),true));
+      $('stop').addEventListener('click',event=>action('stopReminders',event.currentTarget));
+      $('send-now').addEventListener('click',event=>action('sendReminderNow',event.currentTarget));
+      $('test-mail').addEventListener('click',async event=>{
+       const feedback=feedbackAt(event.currentTarget);clearFeedback(feedback);busy(true);try{const result=await rpc('testMail',state.nonce);notify(feedback,'Google MailApp accepted the test. Check your inbox and junk folder. Reference: '+result.reference);}
+       catch(e){notify(feedback,e.message,true);}finally{try{render(await rpc('getDashboard'));}finally{busy(false);}}
       });
       function download(name,body){const a=document.createElement('a'),url=URL.createObjectURL(new Blob([body],{type:'text/csv;charset=utf-8'}));a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
-      $('export').addEventListener('click',async()=>{try{download('dayoff-FY'+state.config.fiscalYear+'-details.csv',await rpc('exportReport'));}catch(e){message(e.message,true);}});
+      $('export').addEventListener('click',async event=>{const feedback=feedbackAt(event.currentTarget);clearFeedback(feedback);try{download('dayoff-FY'+state.config.fiscalYear+'-details.csv',await rpc('exportReport'));}catch(e){notify(feedback,e.message,true);}});
       $('export-summary').addEventListener('click',()=>{const t=state.totals,rows=['category,used_hours,planned_hours,available_now_hours,projected_FY_end_hours'];for(const c of ['vacation','sick','personal'])rows.push([c,money(t.used[c]),money(t.planned[c]),money(t.available[c]),money(t.projected[c])].join(','));download('dayoff-FY'+state.config.fiscalYear+'-balances.csv',rows.join('\r\n'));});
       rpc('getDashboard').then(s=>{render(s);message('');}).catch(e=>message(e.message,true));
     </script>

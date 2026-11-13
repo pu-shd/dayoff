@@ -65,6 +65,7 @@ function harness(
     },
   });
   const calls: { name: string; args: unknown[] }[] = [];
+  const failures = new Map<string, { message: string; persist: boolean }>();
   const state = {
     fiscalPeriod: { start: "2026-07-01", end: "2027-06-30" },
     initialized: true,
@@ -100,6 +101,9 @@ function harness(
   }
   function response(name: string, args: unknown[]) {
     calls.push({ name, args });
+    const failure = failures.get(name);
+    failures.delete(name);
+    if (failure && !failure.persist) throw new Error(failure.message);
     if (name === "importHistory") {
       state.history.years = historyIndex(archive!.years);
       state.history.pendingImportCount = 0;
@@ -139,6 +143,7 @@ function harness(
     }
     if (name === "createRequest") {
       state.records.push(record(args[1] as Input));
+      if (failure) throw new Error(failure.message);
       return refresh();
     }
     if (name === "saveReminders") {
@@ -226,7 +231,17 @@ function harness(
     get("email-choice").dispatchEvent(new window.Event("change"));
     await tick();
   }
-  return { document, window, get, calls, tick, preview, choice };
+  return {
+    document,
+    window,
+    get,
+    calls,
+    tick,
+    preview,
+    choice,
+    failNext: (name: string, message: string, persist = false) =>
+      failures.set(name, { message, persist }),
+  };
 }
 test("preview presents dates, fixed hours and an accurate self-addressed draft without submitting", async () => {
   const h = harness();
@@ -255,8 +270,10 @@ test("email choice refreshes the draft and none saves the request into the CALM 
   const call = h.calls.find((x) => x.name === "createRequest")!;
   assert.equal((call.args[1] as Input).emailTo, "none");
   assert.equal(h.get("calm-count").textContent, "1 outstanding");
+  assert.equal((h.get("email-choice") as HTMLSelectElement).value, "none");
+  assert.match(h.get("request-save-status").textContent!, /No request email/);
+  await h.preview();
   assert.equal((h.get("email-choice") as HTMLSelectElement).value, "self");
-  assert.match(h.get("message").textContent!, /No request email/);
 });
 test("reminder controls set the schedule, send once and confirm entry from the checklist", async () => {
   const r = record({
@@ -579,4 +596,124 @@ test("legacy month disclosures label calculated posting dates without inventing 
     /Exact daily charges cannot be inferred/,
   );
   assert.equal(disclosure.querySelector("button"), null);
+});
+
+test("save confirmation stays beside the disabled Save button with no duplicate header notice", async () => {
+  const h = harness();
+  await h.tick();
+  await h.preview();
+  h.get("send").click();
+  await h.tick();
+  const notice = h.get("request-save-status");
+  assert.ok(notice);
+  assert.equal(
+    notice.closest(".preview-footer"),
+    h.get("send").closest(".preview-footer"),
+  );
+  assert.match(notice.textContent!, /Request saved and Calendar updated/);
+  assert.equal(notice.getAttribute("role"), "status");
+  assert.equal(notice.classList.contains("hide"), false);
+  assert.equal(h.get("preview").classList.contains("hide"), false);
+  assert.equal(h.get("preview-status").textContent, "Saved");
+  assert.equal((h.get("send") as HTMLButtonElement).disabled, true);
+  assert.equal((h.get("email-choice") as HTMLSelectElement).disabled, true);
+  assert.equal(h.get("message").classList.contains("hide"), true);
+  assert.equal(h.get("message").textContent, "");
+  h.get("send").click();
+  await h.tick();
+  assert.equal(h.calls.filter((c) => c.name === "createRequest").length, 1);
+  await h.preview();
+  assert.equal(notice.classList.contains("hide"), true);
+  assert.equal(h.get("preview-status").textContent, "Not submitted");
+  assert.equal((h.get("email-choice") as HTMLSelectElement).disabled, false);
+});
+
+test("reminder and CALM action results appear by their controls even after the queue rerenders", async () => {
+  const r = record({
+    id: "request-local-feedback",
+    category: "vacation",
+    mode: "full",
+    first: "2026-11-16",
+    last: "2026-11-16",
+    emailTo: "none",
+  });
+  const h = harness([r]);
+  await h.tick();
+  h.get("install").click();
+  await h.tick();
+  const reminderNotice = h
+    .get("install")
+    .closest(".actions")!.nextElementSibling!;
+  assert.equal(reminderNotice.getAttribute("data-action-feedback"), "");
+  assert.equal(reminderNotice.textContent, "Saved.");
+  assert.equal(h.get("message").classList.contains("hide"), true);
+  (h.get("calm-queue").querySelector("button") as HTMLButtonElement).click();
+  await h.tick();
+  const calmNotice = h
+    .get("calm-queue")
+    .querySelector("[data-action-feedback]")!;
+  assert.ok(calmNotice);
+  assert.equal(calmNotice.textContent, "Saved.");
+  assert.equal(calmNotice.getAttribute("role"), "status");
+  assert.equal(h.get("message").classList.contains("hide"), true);
+});
+
+test("date removal confirmation stays in the affected date row after rerendering", async () => {
+  const r = record({
+    id: "request-row-feedback",
+    category: "sick",
+    mode: "full",
+    first: "2026-11-16",
+    last: "2026-11-18",
+    emailTo: "none",
+  });
+  const h = harness([r]);
+  await h.tick();
+  h.get("records").querySelector("details")!.setAttribute("open", "");
+  (
+    h
+      .get("records")
+      .querySelector('[data-date="2026-11-17"] button') as HTMLButtonElement
+  ).click();
+  await h.tick();
+  const row = h.get("records").querySelector('[data-date="2026-11-17"]')!;
+  assert.equal(
+    row.querySelector("[data-action-feedback]")?.textContent,
+    "Saved.",
+  );
+  assert.equal(h.get("message").classList.contains("hide"), true);
+});
+
+test("action errors remain beside the originating controls after recovery refresh", async () => {
+  const h = harness();
+  await h.tick();
+  h.failNext("saveReminders", "Email reminder setup could not complete.");
+  h.get("install").click();
+  await h.tick();
+  const notice = h.get("install").closest(".actions")!.nextElementSibling!;
+  assert.match(notice.textContent!, /could not complete/);
+  assert.equal(notice.classList.contains("error"), true);
+  assert.equal(h.get("message").classList.contains("hide"), true);
+  assert.equal(h.get("mode").textContent, "Live · Needs attention");
+});
+test("a recorded request with unfinished work keeps its local error visible and prevents another submission", async () => {
+  const h = harness();
+  await h.tick();
+  await h.preview();
+  h.failNext(
+    "createRequest",
+    "Calendar update failed. Retry incomplete steps.",
+    true,
+  );
+  h.get("send").click();
+  await h.tick();
+  assert.equal(h.get("preview").classList.contains("hide"), false);
+  assert.equal(h.get("preview-status").textContent, "Action needed");
+  assert.equal((h.get("send") as HTMLButtonElement).disabled, true);
+  const notice = h.get("request-save-status");
+  assert.equal(notice.classList.contains("hide"), false);
+  assert.equal(notice.classList.contains("error"), true);
+  assert.match(notice.textContent!, /Calendar update failed/);
+  assert.doesNotMatch(notice.textContent!, /Calendar updated/);
+  assert.equal(h.get("message").classList.contains("hide"), true);
 });

@@ -89,7 +89,7 @@ While delivery is disabled, use **Send test email to me** under CALM reminders. 
 
 Verify the sender, management recipients, Calendar ID, schedules, holidays, and policy. Set `delivery: "google"` locally and run `./scripts/update.sh`. Preview shows a request summary, daily hours, Calendar title, and the exact email draft. Entering the first date fills the last date automatically; it follows the first date until you enter an explicit last date. Leaving the last date blank at preview uses the first date. Nothing is saved or sent until you choose Save.
 
-The header combines readiness and delivery mode into one badge. Routine preview instructions stay with the preview.
+The header combines readiness and delivery mode into one badge. Routine preview instructions stay with the preview. Action confirmations and errors appear beside the initiating controls, including reminder settings, CALM entries, imports, and individual date changes. The page brings the result into view. After saving, the request summary stays visible with a Saved badge and a disabled Save button; its confirmation appears directly below that button. Previewing another request clears that confirmation and restores the default email choice.
 
 Use **Add dates** for additional date ranges in a single submission, such as three days followed by a gap and one more day. Each row has its own length, dates, and optional absence times; the leave type and email choice apply to the whole request. Remove an unsaved range before preview if needed. Up to 32 ranges are supported, with each working date appearing once. Weekends and configured holidays are excluded per row. Duplicate dates are rejected before anything is saved.
 
