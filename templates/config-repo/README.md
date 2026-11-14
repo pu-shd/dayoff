@@ -20,6 +20,12 @@ The tests run private settings/inventory validation and source collation with re
 
 To tear down the web deployment while retaining the ledger and source files, review `./scripts/teardown.sh --dry-run`, then run `./scripts/teardown.sh`. Delivery is disabled before deployment removal. Do not use teardown merely to update code or settings.
 
+## Recover on another machine
+
+Clone this private repository, reinstall the listed tools, and run `./scripts/bootstrap.sh` and `./scripts/test.sh`. Bootstrap fetches the pinned public source and regenerates local files. To deploy, sign in to the existing Google account with `(cd local/app && npx --no-install clasp login)`, then use `./scripts/update.sh`.
+
+The deployed app, live Google Sheet journal, Script Properties and reminder triggers remain in Google when a workstation is wiped. Keep the original project and ledger. **Do not create a new ledger or delete Script Properties during recovery.** First-use setup displays a warning and requires typing `CREATE NEW LEDGER`; the server refuses creation when a ledger binding or retained ledger metadata exists. There is no overwrite option. Original workbooks in Git are not a backup of subsequent live journal entries; retain private Sheet backups separately.
+
 ## Optional GitOps deployment
 
 Checks run on every push and pull request. Deployment is disabled until repository variable `DAYOFF_GITOPS_ENABLED` is `true`. To enable it, create a GitHub environment named `dayoff`, add only the `CLASP_AUTH_JSON` environment secret from a private credential file using stdin, then set that variable. Keep authentication out of command-line arguments, commits and workflow output. No credentials are copied automatically.

@@ -62,6 +62,12 @@ Workbook changes require review and `./scripts/inventory.sh` before commit. Rebu
 
 `./scripts/teardown.sh --dry-run` previews removal; `./scripts/teardown.sh` disables delivery and removes the web deployment while retaining the private ledger and source workbooks.
 
+## Recover a workstation
+
+Clone the private repo and reinstall the listed tools. Run `./scripts/bootstrap.sh` and `./scripts/test.sh`, then sign in with the existing Google account using `(cd local/app && npx --no-install clasp login)` before deploying. Bootstrap rebuilds local files from the pinned source and original workbooks. A separate public checkout is useful for application development; deployment should continue from the private repo.
+
+The running app, live ledger, Script Properties and reminder triggers remain in Google. **Do not initialize a new ledger or delete Script Properties during machine recovery.** New ledger creation requires typing `CREATE NEW LEDGER` and is rejected if a ledger binding or retained ledger metadata exists. There is no overwrite override. See [ledger protection and backups](operations.md#backups-teardown-and-rollover). The Git repos preserve code, settings and original workbooks, not subsequent live journal entries.
+
 ## CI and optional GitOps
 
 Private-repo checks verify repository visibility, configuration, target identifiers and workbook hashes. Read-only container checks collate original sources and reconcile current-year monthly totals with cached annual totals. They also run the pinned application's lint, format, type and unit tests. Checks print status and counts, not attendance values. No private bundles or sources are uploaded as artifacts.

@@ -73,6 +73,17 @@ function actor(): Config {
 function props() {
   return PropertiesService.getScriptProperties();
 }
+function ledgerRecoveryRequired(): boolean {
+  return (
+    !props().getProperty("LEDGER_ID") &&
+    [
+      "SCHEMA_VERSION",
+      "FISCAL_YEAR",
+      "FISCAL_YEAR_START",
+      "HISTORY_ANCHOR_FY",
+    ].some((key) => props().getProperty(key) !== null)
+  );
+}
 function store() {
   const id = props().getProperty("LEDGER_ID");
   invariant(id, "Initialize your private ledger first.");
@@ -413,6 +424,7 @@ function dashboard(c: Config) {
   const revisions = new Map(years.map((y) => [y.fiscalYear, y.revision]));
   return {
     initialized,
+    ledgerRecoveryRequired: ledgerRecoveryRequired(),
     nonce: nonce(),
     config: { ...c },
     fiscalPeriod: fiscalBounds(c),
@@ -507,27 +519,45 @@ function getStaffCalendar(ranges: unknown, force = false): StaffLookup {
 function getDashboard() {
   return safe(() => dashboard(actor()));
 }
-function initialize(token: string) {
+function initialize(token: string, acknowledgment?: string) {
   return safe(() =>
-    guard(token, (c) => {
-      if (!props().getProperty("LEDGER_ID")) {
-        // Migration 001: append-only request journal. Never replace an existing ledger.
-        const book = SpreadsheetApp.create(
-          "Dayoff FY" + c.fiscalYear + " — Private",
+    locked(() => {
+      const c = actor();
+      consume(token);
+      invariant(
+        !props().getProperty("LEDGER_ID"),
+        "This installation already has a ledger. Creation or replacement is blocked; the existing ledger was left unchanged. Reopen it instead.",
+      );
+      invariant(
+        !ledgerRecoveryRequired(),
+        "This installation has ledger metadata but no ledger link. Restore the original ledger binding; replacement creation is blocked.",
+      );
+      invariant(
+        acknowledgment === "CREATE NEW LEDGER",
+        "Explicit confirmation required: type CREATE NEW LEDGER to create a new private ledger.",
+      );
+      for (const r of DAYOFF_SEED.records)
+        invariant(
+          r.legacy === true && r.calm === "historical",
+          "Invalid historical import.",
         );
-        const sheet = book.getSheets()[0];
-        sheet.setName("Journal");
-        sheet.appendRow(["timestamp", "kind", "payload"]);
-        sheet.setFrozenRows(1);
-        props().setProperties({
-          LEDGER_ID: book.getId(),
-          SCHEMA_VERSION: "3",
-          FISCAL_YEAR: String(c.fiscalYear),
-          FISCAL_YEAR_START: c.fiscalYearStart ?? "07-01",
-        });
-        historySheet(true);
-        props().setProperty("SCHEMA_VERSION", String(SCHEMA));
-      }
+      // Migration 001: append-only request journal. Never replace an existing ledger.
+      const book = SpreadsheetApp.create(
+        "Dayoff FY" + c.fiscalYear + " — Private",
+      );
+      // Bind immediately so an interrupted setup cannot create a replacement on retry.
+      props().setProperties({
+        LEDGER_ID: book.getId(),
+        SCHEMA_VERSION: "3",
+        FISCAL_YEAR: String(c.fiscalYear),
+        FISCAL_YEAR_START: c.fiscalYearStart ?? "07-01",
+      });
+      const sheet = book.getSheets()[0];
+      sheet.setName("Journal");
+      sheet.appendRow(["timestamp", "kind", "payload"]);
+      sheet.setFrozenRows(1);
+      historySheet(true);
+      props().setProperty("SCHEMA_VERSION", String(SCHEMA));
       const ids = new Set(list().map((r) => r.id));
       for (const r of DAYOFF_SEED.records)
         if (!ids.has(r.id)) {

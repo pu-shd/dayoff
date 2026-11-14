@@ -627,7 +627,28 @@
           Create a Google Sheet owned by your account and import your configured
           workbook totals.
         </p>
-        <button id="initialize">Create private ledger</button>
+        <p id="ledger-creation-warning" class="status error">
+          Warning: use this only for a new installation. An existing ledger
+          cannot be overwritten here. To restore this installation on another
+          machine, keep its existing Apps Script project and ledger; do not
+          create a new one.
+        </p>
+        <p id="ledger-recovery-warning" class="status error hide" role="alert">
+          Existing ledger metadata was found, but its ledger link is missing.
+          Creation is blocked. Restore the original ledger binding before
+          continuing.
+        </p>
+        <label for="ledger-confirmation"
+          >Type CREATE NEW LEDGER to confirm a new installation</label
+        >
+        <input
+          id="ledger-confirmation"
+          type="text"
+          autocomplete="off"
+          spellcheck="false"
+          aria-describedby="ledger-creation-warning ledger-recovery-warning"
+        />
+        <button id="initialize" disabled>Create private ledger</button>
       </div>
       <div id="content" class="hide">
         <div class="cards" id="cards"></div>
@@ -972,7 +993,7 @@
       function feedbackAfter(anchor) {let node=anchor.nextElementSibling;if(!node?.hasAttribute('data-action-feedback')){node=newFeedback();anchor.after(node);}return node;}
       function feedbackAt(trigger) {
        if(trigger.id==='send')return ()=>$('request-save-status');
-       if(trigger.id==='initialize')return ()=>feedbackAfter($('cards'));
+       if(trigger.id==='initialize')return ()=>state?.initialized?feedbackAfter($('cards')):feedbackIn($('setup'));
        const record=trigger.closest('[data-record-id]'),day=trigger.closest('[data-date]');
        if(record){const id=record.dataset.recordId,date=day?.dataset.date,section=record.closest('.panel');return ()=>{const row=$('record-'+id),target=date?[...row?.querySelectorAll('[data-date]')??[]].find(n=>n.dataset.date===date):row;return feedbackIn(target?.lastElementChild||section);};}
        const item=trigger.closest('.queue-item');
@@ -984,6 +1005,8 @@
       function notify(feedback,value,error=false) {const node=feedback();message('',error);node.textContent=value;node.className='status'+(error?' error':'');for(let parent=node.parentElement;parent;parent=parent.parentElement)if(parent.tagName==='DETAILS')parent.setAttribute('open','');node.scrollIntoView?.({block:'nearest',inline:'nearest'});}
       function enabled() {
        document.querySelectorAll('button').forEach(b=>b.disabled=working);
+       $('initialize').disabled=working||!state||state.initialized||state.ledgerRecoveryRequired||$('ledger-confirmation').value!=='CREATE NEW LEDGER';
+       $('ledger-confirmation').disabled=working||!state||state.initialized||state.ledgerRecoveryRequired;
        $('email-choice').disabled=working||savedPreview;
        if (!state || working) return;
        const live = state.config.delivery==='google';
@@ -1089,6 +1112,7 @@
        renderMode();
        $('subtitle').textContent=s.config.displayName+' · FY'+s.config.fiscalYear+' · balances as of '+s.today;
        $('setup').classList.toggle('hide',s.initialized);$('content').classList.toggle('hide',!s.initialized);
+       $('ledger-recovery-warning').classList.toggle('hide',!s.ledgerRecoveryRequired);
        $('cards').replaceChildren();
        for(const [key,label] of [['vacation','Vacation'],['sick','Sick'],['personal','Personal']]){
         const card=text('div','','card');card.setAttribute('data-category',key);card.append(text('span',label+' available'),text('strong',money(s.totals.available[key])+' h'),statDetails('Details',money(s.totals.used[key])+' used · '+money(s.totals.planned[key])+' planned · '+money(s.totals.projected[key])+' projected at FY end'));$('cards').append(card);
@@ -1238,7 +1262,14 @@
       $('import-history').addEventListener('click',event=>action('importHistory',event.currentTarget));
       $('history-year').addEventListener('change',()=>loadHistory(Number($('history-year').value)));
       $('history-export').addEventListener('click',()=>{if(!historyYear)return;const y=historyYear,rows=['month,vacation_used_hours,sick_used_hours,personal_used_hours,vacation_closing_hours,sick_closing_hours,personal_closing_hours'];for(const m of y.months)rows.push([m.month,...['vacation','sick','personal'].map(c=>money(m[c])),...['vacation','sick','personal'].map(c=>m.balances[c]===null?'':money(m.balances[c]))].join(','));rows.push(['annual_used',...['vacation','sick','personal'].map(c=>money(y.totals[c])),'','',''].join(','));download('dayoff-history-FY'+y.fiscalYear+'.csv',rows.join('\r\n'));});
-      $('initialize').addEventListener('click',event=>action('initialize',event.currentTarget));
+      $('ledger-confirmation').addEventListener('input',enabled);
+      $('initialize').addEventListener('click',event=>{
+       if(working)return;
+       const confirmation=$('ledger-confirmation').value,feedback=feedbackAt(event.currentTarget);
+       if(state?.initialized||state?.ledgerRecoveryRequired){notify(feedback,'This installation already has ledger data. Creation or replacement is blocked; reopen the existing ledger or restore its original binding.',true);return;}
+       if(confirmation!=='CREATE NEW LEDGER'){notify(feedback,'Type CREATE NEW LEDGER to confirm a new installation.',true);return;}
+       action('initialize',event.currentTarget,confirmation);
+      });
       $('install').addEventListener('click',event=>action('saveReminders',event.currentTarget,Number($('reminder-hour').value),true));
       $('stop').addEventListener('click',event=>action('stopReminders',event.currentTarget));
       $('send-now').addEventListener('click',event=>action('sendReminderNow',event.currentTarget));

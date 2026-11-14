@@ -43,6 +43,8 @@ function harness(
   focus = { id: "", version: "" },
   archive?: HistoryArchive,
   config: Config = cfg,
+  initialized = true,
+  ledgerRecoveryRequired = false,
 ) {
   const { document, window } = parseHTML(html);
   // linkedom omits native select.value setter/default selection; emulate browser behavior.
@@ -72,7 +74,8 @@ function harness(
   const failures = new Map<string, { message: string; persist: boolean }>();
   const state = {
     fiscalPeriod: { start: "2026-07-01", end: "2027-06-30" },
-    initialized: true,
+    initialized,
+    ledgerRecoveryRequired,
     history: {
       anchorFiscalYear: 2027,
       configuredCount: archive?.years.length ?? 0,
@@ -117,6 +120,10 @@ function harness(
         checkedAt: "2026-11-13T17:00:00Z",
         cached: false,
       };
+    }
+    if (name === "initialize") {
+      state.initialized = true;
+      return refresh();
     }
     if (name === "importHistory") {
       state.history.years = historyIndex(archive!.years);
@@ -886,4 +893,54 @@ test("HR checklist and record start collapsed and preserve disclosure choices ac
   await h.tick();
   assert.equal(h.get("calm-section").hasAttribute("open"), true);
   assert.equal(h.get("record-section").hasAttribute("open"), true);
+});
+
+test("new ledger setup warns and requires typed confirmation before sending initialization", async () => {
+  const h = harness([], undefined, undefined, cfg, false);
+  await h.tick();
+  assert.match(
+    h.get("ledger-creation-warning").textContent!.replace(/\s+/g, " "),
+    /existing ledger.*restore/i,
+  );
+  const create = h.get("initialize") as HTMLButtonElement;
+  assert.equal(create.disabled, true);
+  const confirmation = h.get("ledger-confirmation") as HTMLInputElement;
+  confirmation.value = "create new ledger";
+  confirmation.dispatchEvent(new h.window.Event("input"));
+  assert.equal(create.disabled, true);
+  confirmation.value = "CREATE NEW LEDGER";
+  confirmation.dispatchEvent(new h.window.Event("input"));
+  assert.equal(create.disabled, false);
+  create.click();
+  await h.tick();
+  assert.deepEqual(h.calls.find((c) => c.name === "initialize")?.args, [
+    "test-nonce",
+    "CREATE NEW LEDGER",
+  ]);
+  assert.equal(create.disabled, true);
+});
+test("an initialized client blocks a forced stale setup click", async () => {
+  const h = harness();
+  await h.tick();
+  const create = h.get("initialize") as HTMLButtonElement;
+  create.disabled = false;
+  create.click();
+  await h.tick();
+  assert.equal(h.calls.filter((c) => c.name === "initialize").length, 0);
+});
+test("missing ledger bindings show recovery guidance and cannot enable creation", async () => {
+  const h = harness([], undefined, undefined, cfg, false, true);
+  await h.tick();
+  assert.equal(
+    h.get("ledger-recovery-warning").classList.contains("hide"),
+    false,
+  );
+  assert.equal(
+    (h.get("ledger-confirmation") as HTMLInputElement).disabled,
+    true,
+  );
+  (h.get("ledger-confirmation") as HTMLInputElement).value =
+    "CREATE NEW LEDGER";
+  h.get("ledger-confirmation").dispatchEvent(new h.window.Event("input"));
+  assert.equal((h.get("initialize") as HTMLButtonElement).disabled, true);
 });

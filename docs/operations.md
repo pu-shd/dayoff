@@ -24,7 +24,7 @@ The owner-only MailApp diagnostic can run in preview mode via **Send test email 
 
 1. Deploy with delivery disabled.
 2. Complete Google's runtime authorization if prompted.
-3. Initialize the private ledger.
+3. Read the setup warning and type `CREATE NEW LEDGER` to initialize a genuinely new installation.
 4. Compare imported category totals with the workbook.
 5. Verify FY, opening balances, cap, accrual timing, schedules, lunch window, holidays, and rounding.
 6. Preview full, half, academic partial, and summer partial requests.
@@ -46,6 +46,10 @@ A rejected request should be cancelled. Follow the correction reminder if it was
 Daily reminder deduplication is recorded after successful send acceptance. Process interruption around email delivery can still cause duplicate or missed reminders. The outstanding list remains visible in the app.
 
 ## Backups, teardown, and rollover
+
+Ledger creation is blocked once this Apps Script project has a ledger binding. A repeated or stale setup call is rejected under the script lock before migrations, workbook seed imports or other ledger writes. There is no overwrite switch. If the ledger link is missing but schema/fiscal/history metadata remains, setup displays recovery guidance and blocks creation. An interrupted setup retains the binding as soon as the new Sheet ID is available; inspect and repair that same ledger rather than creating another one.
+
+When recovering a workstation, clone the private configuration repo, run bootstrap, and sign in again with the existing account. Keep the original Apps Script project, deployment and Google Sheet. Do not delete Script Properties to bypass the creation guard. Git preserves configuration and original workbooks; the live journal and reminder state remain in Google. This guard protects application setup; it cannot prevent manual deletion or editing in Google Drive or the Apps Script editor.
 
 Export details and balances privately or copy the private Sheet in Drive. Never edit Journal rows manually. Exact legacy Excel layout export is not included.
 

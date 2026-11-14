@@ -97,7 +97,7 @@ npx --no-install clasp login
 ./scripts/deploy.sh
 ```
 
-Open the printed `/exec` URL, complete Google's first-use OAuth consent if required, and choose **Create private ledger**. Creation, source upload, and versioned deployment happen through the CLI. No editor copy/paste is needed. Administrators may need to permit Apps Script; enable API access at https://script.google.com/home/usersettings if requested.
+Open the printed `/exec` URL and complete Google's first-use OAuth consent if required. For a new installation, read the warning, type `CREATE NEW LEDGER`, and choose **Create private ledger**. Existing installations retain their bound ledger; setup cannot overwrite it. Source upload and versioned deployment happen through the CLI. No editor copy/paste is needed. Administrators may need to permit Apps Script; enable API access at https://script.google.com/home/usersettings if requested.
 
 CLI authorization and runtime authorization are separate. Google can require browser consent even for a CLI-built deployment. `clasp run` needs additional API-executable/Cloud-project setup and is not required by this app.
 

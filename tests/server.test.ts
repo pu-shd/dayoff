@@ -40,6 +40,7 @@ function harness(
   }[] = [];
   const scriptCache = new Map<string, string>();
   let beforeWrite: (() => void) | undefined;
+  let failJournalAppend = false;
   let etagVersion = 0;
   let failRead = false;
   let today = "2026-11-13",
@@ -48,7 +49,13 @@ function harness(
     created = 0;
   const makeSheet = (data: unknown[][]) => ({
     setName: () => {},
-    appendRow: (row: unknown[]) => data.push(row),
+    appendRow: (row: unknown[]) => {
+      if (data === rows && failJournalAppend) {
+        failJournalAppend = false;
+        throw Error("temporary journal write failure");
+      }
+      data.push(row);
+    },
     setFrozenRows: () => {},
     getLastRow: () => data.length,
     getRange: (first: number, _column: number, count: number) => ({
@@ -232,7 +239,7 @@ function harness(
   const api = (context.Dayoff as { handlers: Handlers }).handlers;
   function init() {
     const s = api.getDashboard();
-    return api.initialize(s.nonce);
+    return Reflect.apply(api.initialize, null, [s.nonce, "CREATE NEW LEDGER"]);
   }
   return {
     api,
@@ -252,6 +259,9 @@ function harness(
     },
     mails,
     created: () => created,
+    failNextJournalAppend: () => {
+      failJournalAppend = true;
+    },
     triggers,
     setToday: (s: string) => {
       today = s;
@@ -264,7 +274,7 @@ function harness(
     },
   };
 }
-test("GET renders only; initialization is explicit and idempotent", () => {
+test("GET renders only; repeated initialization is blocked without modifying the ledger", () => {
   const h = harness("disabled");
   h.api.doGet({
     parameter: { request: "request-1234" },
@@ -272,9 +282,132 @@ test("GET renders only; initialization is explicit and idempotent", () => {
   assert.equal(h.rows.length, 0);
   assert.equal(h.created(), 0);
   h.init();
-  h.init();
+  assert.throws(() => h.init(), /already has a ledger/);
   assert.equal(h.created(), 1);
   assert.equal(h.rows.length, 1);
+});
+test("new ledger creation requires the exact explicit acknowledgment", () => {
+  const h = harness("disabled");
+  for (const acknowledgment of [
+    undefined,
+    "",
+    "create new ledger",
+    "OVERWRITE",
+  ]) {
+    const before = h.api.getDashboard();
+    assert.throws(
+      () =>
+        Reflect.apply(h.api.initialize, null, [before.nonce, acknowledgment]),
+      /Explicit confirmation.*CREATE NEW LEDGER/,
+    );
+    assert.equal(h.created(), 0);
+    assert.equal(h.rows.length, 0);
+    assert.equal(h.properties.size, 0);
+  }
+  const s = Reflect.apply(h.api.initialize, null, [
+    h.api.getDashboard().nonce,
+    "CREATE NEW LEDGER",
+  ]);
+  assert.equal(s.initialized, true);
+  assert.equal(h.created(), 1);
+});
+test("existing ledger setup attempts are rejected before migrations or any data writes", () => {
+  const h = harness();
+  h.init();
+  h.properties.set("SCHEMA_VERSION", "1");
+  const before = JSON.stringify({
+    rows: h.rows,
+    history: h.historyRows,
+    properties: [...h.properties],
+  });
+  assert.throws(
+    () =>
+      Reflect.apply(h.api.initialize, null, [
+        h.api.getDashboard().nonce,
+        "CREATE NEW LEDGER",
+      ]),
+    /already has a ledger.*left unchanged/,
+  );
+  assert.equal(
+    JSON.stringify({
+      rows: h.rows,
+      history: h.historyRows,
+      properties: [...h.properties],
+    }),
+    before,
+  );
+  assert.equal(h.created(), 1);
+  assert.equal(h.events.size, 0);
+  assert.equal(h.mails.length, 0);
+});
+test("lost ledger binding with retained metadata blocks replacement creation", () => {
+  const h = harness("disabled");
+  h.init();
+  h.properties.delete("LEDGER_ID");
+  const before = JSON.stringify([...h.properties]);
+  assert.throws(
+    () =>
+      Reflect.apply(h.api.initialize, null, [
+        h.api.getDashboard().nonce,
+        "CREATE NEW LEDGER",
+      ]),
+    /ledger metadata.*Restore/,
+  );
+  assert.equal(h.created(), 1);
+  assert.equal(JSON.stringify([...h.properties]), before);
+});
+test("an interrupted first setup retains its binding and blocks replacement on retry", () => {
+  const h = harness("disabled");
+  h.failNextJournalAppend();
+  assert.throws(() => h.init(), /operation could not complete/);
+  assert.equal(h.properties.get("LEDGER_ID"), "private-ledger");
+  assert.equal(h.api.getDashboard().initialized, true);
+  const properties = JSON.stringify([...h.properties]);
+  assert.throws(() => h.init(), /already has a ledger/);
+  assert.equal(h.created(), 1);
+  assert.equal(h.rows.length, 0);
+  assert.equal(JSON.stringify([...h.properties]), properties);
+});
+test("a new workbook seed cannot append records to an existing ledger through setup", () => {
+  const seed: RecordEntry = {
+    id: "legacy-new-source",
+    version: 1,
+    legacy: true,
+    input: {
+      id: "legacy-new-source",
+      category: "vacation",
+      mode: "full",
+      first: "2026-07-31",
+      last: "2026-07-31",
+    },
+    days: [
+      { date: "2026-07-31", hours: 725, allDay: true, start: "", end: "" },
+    ],
+    status: "active",
+    calm: "historical",
+    calendar: "disabled",
+    email: "disabled",
+    created: "historical-import",
+    updated: "historical-import",
+  };
+  const h = harness("disabled", [seed]);
+  for (const [key, value] of Object.entries({
+    LEDGER_ID: "private-ledger",
+    SCHEMA_VERSION: "5",
+    FISCAL_YEAR: "2027",
+    FISCAL_YEAR_START: "07-01",
+  }))
+    h.properties.set(key, value);
+  h.rows.push(["timestamp", "kind", "payload"]);
+  const before = h.api.getDashboard();
+  assert.equal(before.records.length, 0);
+  assert.throws(
+    () => h.api.initialize(before.nonce, "CREATE NEW LEDGER"),
+    /already has a ledger/,
+  );
+  assert.equal(h.rows.length, 1);
+  assert.equal(h.api.getDashboard().records.length, 0);
+  assert.equal(h.created(), 0);
 });
 test("nonce replay and another account cannot mutate a private installation", () => {
   const h = harness();
@@ -467,7 +600,7 @@ test("migration 002 appends routing without changing balances and never runs on 
   const before = h.api.getDashboard();
   assert.equal(h.rows.length, rows);
   assert.equal(h.properties.get("SCHEMA_VERSION"), "1");
-  const after = h.api.initialize(before.nonce);
+  const after = h.api.saveReminders(before.nonce, 9, false);
   assert.equal(h.properties.get("SCHEMA_VERSION"), "5");
   assert.equal(after.records[0].input.emailTo, "management");
   assert.equal(
@@ -477,7 +610,7 @@ test("migration 002 appends routing without changing balances and never runs on 
   assert.equal(JSON.stringify(after.totals), JSON.stringify(before.totals));
   assert.equal(h.mails.length, mails);
   const upgraded = h.rows.length;
-  h.api.initialize(after.nonce);
+  h.api.saveReminders(after.nonce, 9, false);
   assert.equal(h.rows.length, upgraded);
 });
 test("cancellations stay in the CALM correction digest until explicitly confirmed", () => {
