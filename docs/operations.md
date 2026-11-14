@@ -47,7 +47,7 @@ Daily reminder deduplication is recorded after successful send acceptance. Proce
 
 ## Backups, teardown, and rollover
 
-Ledger creation is blocked once this Apps Script project has a ledger binding. A repeated or stale setup call is rejected under the script lock before migrations, workbook seed imports or other ledger writes. There is no overwrite switch. If the ledger link is missing but schema/fiscal/history metadata remains, setup displays recovery guidance and blocks creation. An interrupted setup retains the binding as soon as the new Sheet ID is available; inspect and repair that same ledger rather than creating another one.
+Ledger creation is blocked once this Apps Script project has a ledger binding. A repeated or stale setup call is rejected under the script lock before migrations, workbook seed imports or other ledger writes. There is no overwrite switch. If the ledger link is missing but schema/fiscal/history metadata remains, setup displays recovery guidance and blocks creation. An interrupted setup retains the binding as soon as the new Sheet ID is available; inspect and repair that same ledger rather than creating another one. A missing or changed Journal header blocks reads and new request records until that same ledger is repaired.
 
 When recovering a workstation, clone the private configuration repo, run bootstrap, and sign in again with the existing account. Keep the original Apps Script project, deployment and Google Sheet. Do not delete Script Properties to bypass the creation guard. Git preserves configuration and original workbooks; the live journal and reminder state remain in Google. This guard protects application setup; it cannot prevent manual deletion or editing in Google Drive or the Apps Script editor.
 

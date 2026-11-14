@@ -96,6 +96,11 @@ function store() {
   );
   const sheet = book.getSheetByName("Journal");
   invariant(sheet, "Ledger journal is missing.");
+  invariant(
+    sheet.getRange(1, 1, 1, 3).getValues()[0]?.join("\u0000") ===
+      "timestamp\u0000kind\u0000payload",
+    "This ledger is incomplete or its journal header was changed. Restore the original journal in the existing Sheet; creation or replacement remains blocked.",
+  );
   return sheet;
 }
 function list(): RecordEntry[] {

@@ -358,15 +358,40 @@ test("lost ledger binding with retained metadata blocks replacement creation", (
 });
 test("an interrupted first setup retains its binding and blocks replacement on retry", () => {
   const h = harness("disabled");
+  const retryNonce = h.api.getDashboard().nonce;
   h.failNextJournalAppend();
   assert.throws(() => h.init(), /operation could not complete/);
   assert.equal(h.properties.get("LEDGER_ID"), "private-ledger");
-  assert.equal(h.api.getDashboard().initialized, true);
+  assert.throws(() => h.api.getDashboard(), /ledger is incomplete/);
   const properties = JSON.stringify([...h.properties]);
-  assert.throws(() => h.init(), /already has a ledger/);
+  assert.throws(
+    () => h.api.initialize(retryNonce, "CREATE NEW LEDGER"),
+    /already has a ledger/,
+  );
   assert.equal(h.created(), 1);
   assert.equal(h.rows.length, 0);
   assert.equal(JSON.stringify([...h.properties]), properties);
+});
+test("an incomplete or changed journal header blocks reads and new ledger records", () => {
+  const h = harness();
+  const s = h.init();
+  h.rows[0] = ["changed", "kind", "payload"];
+  assert.throws(() => h.api.getDashboard(), /ledger is incomplete/);
+  assert.throws(
+    () =>
+      h.api.createRequest(s.nonce, {
+        id: "request-corrupt-journal",
+        category: "vacation",
+        mode: "full",
+        first: "2026-11-16",
+        last: "2026-11-16",
+      }),
+    /ledger is incomplete/,
+  );
+  assert.equal(h.rows.length, 1);
+  assert.equal(h.created(), 1);
+  assert.equal(h.events.size, 0);
+  assert.equal(h.mails.length, 0);
 });
 test("a new workbook seed cannot append records to an existing ledger through setup", () => {
   const seed: RecordEntry = {
