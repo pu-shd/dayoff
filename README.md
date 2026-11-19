@@ -132,6 +132,8 @@ After saving a request and syncing it to Staff Calendar, choose **Open Teams dra
 
 Dayoff puts the recipients and draft text into the Teams link. For long requests, **Open Teams chat** opens the chat and you can copy the complete draft from Dayoff. You can also copy the draft into a Teams channel or use it if your Teams client opens with a blank message.
 
+To bookmark a sent Teams message, choose **More options → Copy link** on the message in Teams. In Dayoff, expand the request’s **Teams message** section under **Your record**, paste the link, and choose **Save link**. Open it from the same request later. To replace or clear it, edit the field and save again. Teams controls who can view the message. [Copy a message link in Teams](https://support.microsoft.com/en-us/teams/chat/share-a-link-to-a-specific-message)
+
 ## Staff Calendar context while choosing dates
 
 After a short pause in date entry, Day Off checks the configured Staff Calendar and displays event titles and absence intervals for the selected working dates. The lookup runs separately from preview and Save; a slow or failed lookup does not hold up either action. Noncontiguous ranges exclude their gap dates. Multi-day events and all-day exclusive end dates are handled in the configured timezone. Titles are shown as written rather than used to infer approval or staffing levels.

@@ -69,6 +69,7 @@ export interface RecordEntry {
     | "disabled"
     | "skipped";
   emailRecipients?: string[];
+  teamsMessageUrl?: string;
   created: string;
   updated: string;
   legacy?: boolean;

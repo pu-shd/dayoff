@@ -452,6 +452,81 @@ test("nonce replay and another account cannot mutate a private installation", ()
   h.setIdentity("someone@example.edu");
   assert.throws(() => h.api.getDashboard(), /different account/);
 });
+test("an owner can bookmark a Teams message without changing leave or delivery state", () => {
+  const h = harness();
+  const start = h.init();
+  const id = "teams-link-request";
+  const before = h.api.createRequest(start.nonce, {
+    id,
+    category: "vacation",
+    mode: "full",
+    first: "2026-11-16",
+    last: "2026-11-16",
+  });
+  const original = before.records[0];
+  const url =
+    'https://teams.microsoft.com/l/message/19:fixture@unq.gbl.spaces/123?context={"contextType":"chat"}';
+  const channel =
+    "https://teams.microsoft.com/l/message/19%3Afixture%40thread.tacv2/456?channelName=Leave%20updates";
+  const originalRows = h.rows.length;
+  const setLink = (token: string, version: number, value: string) =>
+    h.api.setTeamsMessageLink(token, id, version, value);
+  h.setIdentity("another@example.edu");
+  assert.throws(
+    () => setLink(before.nonce, original.version, url),
+    /different account/,
+  );
+  h.setIdentity(cfg.ownerEmail);
+  for (const invalid of [
+    "javascript:alert(1)",
+    "https://teams.microsoft.com.example.edu/l/message/19:fixture/123",
+    "https://teams.microsoft.com/l/chat/0/0?message=draft",
+    "https://teams.microsoft.com/l/message/%2e%2e/123",
+    url + "x".repeat(4096),
+  ]) {
+    assert.throws(
+      () => setLink(h.api.getDashboard().nonce, original.version, invalid),
+      /Invalid Teams message link/,
+    );
+  }
+  assert.equal(h.rows.length, originalRows);
+  const saved = setLink(before.nonce, original.version, ` ${url} `);
+  assert.throws(
+    () => setLink(before.nonce, original.version, url),
+    /Confirmation expired/,
+  );
+  const attached = saved.records[0];
+  assert.equal(attached.teamsMessageUrl, url);
+  assert.equal(attached.version, original.version + 1);
+  assert.equal(h.rows.length, originalRows + 1);
+  assert.deepEqual(saved.totals, before.totals);
+  assert.deepEqual(attached.days, original.days);
+  assert.equal(attached.calm, original.calm);
+  assert.equal(attached.calendar, original.calendar);
+  assert.equal(attached.email, original.email);
+  assert.equal(h.calendarWrites.length, 1);
+  assert.equal(h.mails.length, 1);
+  assert.throws(
+    () => setLink(h.api.getDashboard().nonce, original.version, channel),
+    /Request changed/,
+  );
+  const repeated = setLink(h.api.getDashboard().nonce, attached.version, url);
+  assert.equal(repeated.records[0].version, attached.version);
+  assert.equal(h.rows.length, originalRows + 1);
+  const cancelled = h.api.cancelRequest(repeated.nonce, id, attached.version);
+  assert.equal(cancelled.records[0].teamsMessageUrl, url);
+  const replaced = setLink(
+    cancelled.nonce,
+    cancelled.records[0].version,
+    channel,
+  );
+  assert.equal(replaced.records[0].teamsMessageUrl, channel);
+  const cleared = setLink(replaced.nonce, replaced.records[0].version, "");
+  assert.equal(cleared.records[0].teamsMessageUrl, undefined);
+  assert.equal(cleared.records[0].status, "cancelled");
+  assert.equal(h.calendarWrites.length, 2);
+  assert.equal(h.mails.length, 2);
+});
 test("Calendar uses exclusive all-day ends; CALM confirmation updates notes without another email", () => {
   const h = harness();
   let s = h.init();

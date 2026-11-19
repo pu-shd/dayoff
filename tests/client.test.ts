@@ -170,6 +170,19 @@ function harness(
       if (failure) throw new Error(failure.message);
       return refresh();
     }
+    if (name === "setTeamsMessageLink") {
+      const r = state.records.find((r) => r.id === args[1])!;
+      const link = (args[3] as string).trim();
+      if (link) r.teamsMessageUrl = link;
+      else delete r.teamsMessageUrl;
+      r.version++;
+      return {
+        ...refresh(),
+        notice: link
+          ? "Teams message link saved."
+          : "Teams message link cleared.",
+      };
+    }
     if (name === "saveReminders") {
       state.reminders.enabled = args[2] as boolean;
       state.reminders.hour = args[1] as number;
@@ -438,6 +451,47 @@ test("an oversized Teams draft can be copied in full after opening the chat", as
     row.querySelector("pre")!.textContent!,
     /2027-06-30, 08:45–11:00/,
   );
+});
+test("a copied Teams message link can be saved, reopened and cleared from Your record", async () => {
+  const r = record({
+    id: "request-1234",
+    category: "vacation",
+    mode: "full",
+    first: "2026-11-16",
+    last: "2026-11-16",
+  });
+  const h = harness([r]);
+  await h.tick();
+  const row = () => h.get("record-request-1234");
+  const form = () => row().querySelector(".teams-link-form")!;
+  const input = () => form().querySelector("input") as HTMLInputElement;
+  const link = () =>
+    row().querySelector('a[href^="https://teams.microsoft.com/l/message/"]');
+  const url =
+    "https://teams.microsoft.com/l/message/19%3Afixture%40unq.gbl.spaces/123?context=%7B%22contextType%22%3A%22chat%22%7D";
+  const submit = async (value: string) => {
+    input().value = value;
+    form().dispatchEvent(new h.window.Event("submit", { cancelable: true }));
+    await h.tick();
+  };
+  form().closest("details")!.setAttribute("open", "");
+  h.failNext("setTeamsMessageLink", "Invalid Teams message link.");
+  await submit("https://teams.microsoft.com/l/chat/0/0");
+  assert.match(row().textContent!, /Invalid Teams message link/);
+  assert.equal(input().value, "https://teams.microsoft.com/l/chat/0/0");
+  await submit(url);
+  assert.deepEqual(
+    h.calls.filter((x) => x.name === "setTeamsMessageLink").at(-1)!.args,
+    ["test-nonce", r.id, 1, url],
+  );
+  assert.equal(link()!.textContent, "Open sent Teams message");
+  assert.equal(link()!.getAttribute("href"), url);
+  assert.equal(link()!.getAttribute("target"), "_blank");
+  assert.equal(form().closest("details")!.hasAttribute("open"), true);
+  assert.match(row().textContent!, /Teams message link saved/);
+  await submit("");
+  assert.equal(link(), null);
+  assert.match(row().textContent!, /Teams message link cleared/);
 });
 test("reminder controls set the schedule, send once and confirm entry from the checklist", async () => {
   const r = record({

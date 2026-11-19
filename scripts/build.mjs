@@ -81,6 +81,7 @@ const handlers = [
   "createRequest",
   "cancelRequest",
   "removeRequestDate",
+  "setTeamsMessageLink",
   "confirmCalm",
   "retryRequest",
   "resolveEmail",

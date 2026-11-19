@@ -621,6 +621,46 @@ function removeRequestDate(
     }),
   );
 }
+function setTeamsMessageLink(
+  token: string,
+  id: string,
+  version: number,
+  value: unknown,
+) {
+  return safe(() =>
+    guard(token, (c) => {
+      const r = list().find((x) => x.id === id);
+      invariant(
+        r && !r.legacy && r.version === version,
+        "Request changed or not found.",
+      );
+      const error =
+        "Invalid Teams message link. Use Copy link on a sent message in Teams.";
+      invariant(typeof value === "string" && value.length <= 4096, error);
+      const url = value.trim();
+      invariant(
+        url === "" ||
+          /^https:\/\/teams\.microsoft\.com\/l\/message\/[a-z0-9](?:[a-z0-9_.~:@-]|%[a-f0-9]{2})+\/\d+(?:\?[^\s<>#\\]*)?$/i.test(
+            url,
+          ),
+        error,
+      );
+      if ((r.teamsMessageUrl ?? "") !== url) {
+        if (url) r.teamsMessageUrl = url;
+        else delete r.teamsMessageUrl;
+        r.version++;
+        r.updated = new Date().toISOString();
+        save(r);
+      }
+      return {
+        ...dashboard(c),
+        notice: url
+          ? "Teams message link saved."
+          : "Teams message link cleared.",
+      };
+    }),
+  );
+}
 function confirmCalm(token: string, id: string, version: number) {
   return safe(() =>
     guard(token, (c) => {
@@ -903,6 +943,7 @@ export const handlers = {
   createRequest,
   cancelRequest,
   removeRequestDate,
+  setTeamsMessageLink,
   confirmCalm,
   retryRequest,
   resolveEmail,

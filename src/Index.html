@@ -451,6 +451,13 @@
         overflow: auto;
         padding: 12px;
       }
+      .teams-link-form,
+      .teams-link-form button {
+        margin-top: 10px;
+      }
+      .teams-link-form button {
+        display: block;
+      }
       .quiet-details {
         font-size: 12px;
         color: var(--muted);
@@ -1084,6 +1091,51 @@
           target.append(details);
         }
       }
+      function recordTeams(r, open) {
+        const draft = teamsDraft(r);
+        const details = draft ?? text('details', '', 'quiet-details');
+        if (!draft) details.append(text('summary', 'Teams message'));
+        details.dataset.teamsRequest = r.id;
+        if (open) details.setAttribute('open', '');
+
+        if (r.teamsMessageUrl) {
+          const link = text('a', 'Open sent Teams message');
+          link.setAttribute('href', r.teamsMessageUrl);
+          link.target = '_blank';
+          link.rel = 'noopener noreferrer';
+          const paragraph = text('p', '');
+          paragraph.append(link);
+          details.append(paragraph);
+        }
+
+        const form = text('form', '', 'teams-link-form');
+        const input = document.createElement('input');
+        input.id = 'teams-link-' + r.id;
+        input.type = 'url';
+        input.value = r.teamsMessageUrl ?? '';
+        const label = text('label', 'Teams message link');
+        label.setAttribute('for', input.id);
+        const submit = text('button', 'Save link', 'secondary');
+        submit.type = 'submit';
+        const hint = r.teamsMessageUrl
+          ? 'Use Copy link on a sent Teams message. Clear this field and save to remove the link.'
+          : 'Use Copy link on a sent Teams message.';
+        const help = text('small', hint);
+        help.id = input.id + '-hint';
+        input.setAttribute('aria-describedby', help.id);
+        form.append(label, input, help, submit);
+        form.addEventListener('submit', async event => {
+          event.preventDefault();
+          if (working) return;
+          const value = input.value;
+          if (!await action('setTeamsMessageLink', submit, r.id, r.version, value)) {
+            const current = $(input.id);
+            if (current) current.value = value;
+          }
+        });
+        details.append(form);
+        return details;
+      }
       function confirmEntry(r,trigger) {
        const correction=r.calm==='correction';
        if(confirm((correction?'Have you corrected the cancelled leave':'Have you entered this leave')+` in ${hrName()}?\n\n`+dateList(calmDays(r))+'\n'+cap(r.input.category)+' · '+money(calmDays(r).reduce((n,d)=>n+d.hours,0))+' hours'))
@@ -1194,7 +1246,9 @@
        $('reminder-recipient').textContent=s.reminders.recipient;
        $('reminder-last').textContent=s.reminders.attemptState==='unknown'||s.reminders.attemptState==='sending'?'The latest send outcome is uncertain. Check your inbox before retrying.':s.reminders.lastSentDate?'Last reminder sent: '+s.reminders.lastSentDate+'.':'No reminder has been sent yet.';
        $('install').textContent=s.reminders.enabled?'Update reminder schedule':'Enable weekday reminders';
-       const tbody=$('records'),expanded=new Set([...tbody.querySelectorAll('details[open]')].map(node=>node.dataset.requestId));tbody.replaceChildren();
+       const tbody=$('records'),expanded=new Set([...tbody.querySelectorAll('details[open][data-request-id]')].map(node=>node.dataset.requestId));
+       const expandedTeams=new Set([...tbody.querySelectorAll('details[open][data-teams-request]')].map(node=>node.dataset.teamsRequest));
+       tbody.replaceChildren();
        for(const r of [...s.records].sort((a,b)=>b.days[0].date.localeCompare(a.days[0].date))){
         const remaining=activeDays(r),row=document.createElement('tr');row.setAttribute('data-category',r.input.category);row.dataset.recordId=r.id;row.id='record-'+r.id;
         const dateCell=document.createElement('td');
@@ -1224,7 +1278,7 @@
          if(r.calendar==='pending'||r.email==='pending')controls.append(button('Retry incomplete steps',event=>action('retryRequest',event.currentTarget,r.id)));
          if(r.email==='unknown'||r.email==='sending')controls.append(button('Confirm email received',event=>{if(confirm('Confirm receipt or an administrator-verified delivery trace.'))action('resolveEmail',event.currentTarget,r.id,r.version,true);}));
          if(remaining.length)controls.append(button('Cancel all remaining dates',event=>{if(confirm(`Cancel all remaining dates in this request and remove their Calendar events? Any ${hrName()} corrections stay on your checklist.`))action('cancelRequest',event.currentTarget,r.id,r.version);},'danger'));
-         const teams=teamsDraft(r);if(teams)controls.append(teams);
+         controls.append(recordTeams(r,expandedTeams.has(r.id)));
         }
         row.append(controls);tbody.append(row);
        }
