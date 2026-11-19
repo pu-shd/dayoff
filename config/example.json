@@ -5,6 +5,7 @@
   "displayName": "Your first name",
   "ownerEmail": "you@example.edu",
   "managementEmails": ["manager@example.edu"],
+  "teamsChatRecipients": [],
   "calendarId": "staff-calendar-id@group.calendar.google.com",
   "delivery": "disabled",
   "reminderHour": 9,

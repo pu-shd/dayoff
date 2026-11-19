@@ -24,12 +24,12 @@ const cfg = {
   hrSystemName: "CALM",
 } as Config;
 const html = readFileSync("src/Index.html", "utf8");
-function record(input: Input): RecordEntry {
+function record(input: Input, config = cfg): RecordEntry {
   return {
     id: input.id,
     input,
     version: 1,
-    days: createDays(cfg, input),
+    days: createDays(config, input),
     status: "active",
     calm: "pending",
     calendar: "done",
@@ -135,7 +135,7 @@ function harness(
         archive!.years.find((y) => y.fiscalYear === args[0]),
       );
     if (name === "preview") {
-      const r = record(args[0] as Input);
+      const r = record(args[0] as Input, state.config);
       return {
         ...r,
         message: managementMessage(state.config, r),
@@ -166,7 +166,7 @@ function harness(
       return refresh();
     }
     if (name === "createRequest") {
-      state.records.push(record(args[1] as Input));
+      state.records.push(record(args[1] as Input, state.config));
       if (failure) throw new Error(failure.message);
       return refresh();
     }
@@ -304,6 +304,140 @@ test("email choice refreshes the draft and none saves the request into the CALM 
   assert.match(h.get("request-save-status").textContent!, /No request email/);
   await h.preview();
   assert.equal((h.get("email-choice") as HTMLSelectElement).value, "self");
+});
+test("a saved request opens a Teams draft for its configured chat independently of email", async () => {
+  const recipients = ["manager#teams@example.edu", "backup@example.edu"];
+  const h = harness([], undefined, undefined, {
+    ...cfg,
+    teamsChatRecipients: recipients,
+    holidays: ["2026-11-17"],
+  });
+  await h.tick();
+  const row = h.document.querySelector("#date-rows .date-row")!;
+  (row.querySelector("[name=first]") as HTMLInputElement).value = "2026-11-16";
+  (row.querySelector("[name=last]") as HTMLInputElement).value = "2026-11-18";
+  h.get("add-dates").click();
+  const timed = h.document.querySelectorAll("#date-rows .date-row")[1];
+  (timed.querySelector("[name=first]") as HTMLInputElement).value =
+    "2026-11-20";
+  (timed.querySelector("[name=mode]") as HTMLSelectElement).value = "partial";
+  h.get("request-form").dispatchEvent(new h.window.Event("submit"));
+  await h.tick();
+  await h.choice("none");
+  const links = () =>
+    h.document.querySelectorAll('a[href^="https://teams.microsoft.com/"]');
+  assert.equal(links().length, 0);
+  h.get("send").click();
+  await h.tick();
+
+  assert.equal(links().length, 2);
+  const link = h.get("request-teams").querySelector("a")!;
+  const url = new URL(link.getAttribute("href")!);
+  assert.equal(
+    url.origin + url.pathname,
+    "https://teams.microsoft.com/l/chat/0/0",
+  );
+  assert.equal(url.searchParams.get("users"), recipients.join(","));
+  const draft = url.searchParams.get("message")!;
+  assert.equal(h.get("request-teams").querySelector("pre")!.textContent, draft);
+  assert.match(draft, /2026-11-16\n2026-11-18\n2026-11-20, 08:45–11:00/);
+  assert.match(draft, /America\/New_York/);
+  assert.doesNotMatch(draft, /2026-11-17|vacation|CALM|7\.25/i);
+  assert.equal(link.target, "_blank");
+  assert.match(link.rel, /noreferrer/);
+  assert.equal(h.calls.filter((x) => x.name === "createRequest").length, 1);
+  assert.equal(
+    (h.calls.find((x) => x.name === "createRequest")!.args[1] as Input).emailTo,
+    "none",
+  );
+
+  const remove = h.document.querySelector(
+    '[data-date="2026-11-20"] button',
+  ) as HTMLButtonElement;
+  remove.click();
+  await h.tick();
+  assert.equal(
+    h.get("request-teams").textContent!.includes("2026-11-20"),
+    false,
+  );
+  await h.preview();
+  assert.equal(h.get("request-teams").querySelector("a"), null);
+});
+test("Teams drafts require configured recipients and an active Calendar-synced request", async () => {
+  const r = record({
+    id: "request-1234",
+    category: "vacation",
+    mode: "full",
+    first: "2026-11-16",
+    last: "2026-11-16",
+  });
+  const disabled = harness([r]);
+  await disabled.tick();
+  assert.equal(
+    disabled.document.querySelector('a[href*="teams.microsoft.com"]'),
+    null,
+  );
+
+  const h = harness(
+    [
+      { ...r, calendar: "pending" },
+      { ...r, id: "request-2345", status: "cancelled" },
+      { ...r, id: "request-3456", legacy: true },
+      { ...r, id: "request-4567", email: "unknown" },
+    ],
+    undefined,
+    undefined,
+    { ...cfg, teamsChatRecipients: ["manager@example.edu"] },
+  );
+  await h.tick();
+  assert.equal(
+    h.document.querySelectorAll('a[href*="teams.microsoft.com"]').length,
+    1,
+  );
+  assert.ok(
+    h
+      .get("record-request-4567")
+      .querySelector('a[href*="teams.microsoft.com"]'),
+  );
+
+  const previewOnly = harness([r], undefined, undefined, {
+    ...cfg,
+    delivery: "disabled",
+    teamsChatRecipients: ["manager@example.edu"],
+  });
+  await previewOnly.tick();
+  await previewOnly.preview();
+  assert.equal(
+    previewOnly.document.querySelector('a[href*="teams.microsoft.com"]'),
+    null,
+  );
+});
+test("an oversized Teams draft can be copied in full after opening the chat", async () => {
+  const r = record({
+    id: "request-1234",
+    category: "vacation",
+    mode: "partial",
+    first: "2026-11-02",
+    last: "2027-06-30",
+    start: "08:45",
+    end: "11:00",
+  });
+  const h = harness([r], undefined, undefined, {
+    ...cfg,
+    teamsChatRecipients: ["manager@example.edu"],
+  });
+  await h.tick();
+  const row = h.get("record-request-1234");
+  const link = row.querySelector('a[href*="teams.microsoft.com"]')!;
+  assert.equal(link.textContent, "Open Teams chat");
+  assert.equal(
+    new URL(link.getAttribute("href")!).searchParams.has("message"),
+    false,
+  );
+  assert.match(
+    row.querySelector("pre")!.textContent!,
+    /2027-06-30, 08:45–11:00/,
+  );
 });
 test("reminder controls set the schedule, send once and confirm entry from the checklist", async () => {
   const r = record({

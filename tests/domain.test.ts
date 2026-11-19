@@ -121,6 +121,35 @@ test("invalid dates, fiscal boundaries, categories and configuration fail explic
     /category/,
   );
 });
+test("optional Teams chat recipients must be distinct email-style Microsoft sign-in names", () => {
+  assert.equal(
+    validateConfig({ ...cfg, teamsChatRecipients: undefined })
+      .teamsChatRecipients,
+    undefined,
+  );
+  assert.deepEqual(
+    validateConfig({ ...cfg, teamsChatRecipients: [] }).teamsChatRecipients,
+    [],
+  );
+  const valid = ["manager#teams@example.edu", "backup@example.edu"];
+  assert.deepEqual(
+    validateConfig({ ...cfg, teamsChatRecipients: valid }).teamsChatRecipients,
+    valid,
+  );
+  for (const value of [
+    null,
+    "manager@example.edu",
+    [12],
+    ["a+alias@example.edu"],
+    ["a@example.edu,b@example.edu"],
+    ["a@example.edu", "A@example.edu"],
+  ]) {
+    assert.throws(
+      () => validateConfig({ ...cfg, teamsChatRecipients: value as string[] }),
+      /Teams chat recipients/,
+    );
+  }
+});
 test("monthly accrual applies cap after usage, with future leave shown separately", () => {
   const c = structuredClone(cfg);
   c.policy.openingVacation = 34800;

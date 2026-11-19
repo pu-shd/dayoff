@@ -15,6 +15,7 @@ export interface Config {
   displayName: string;
   ownerEmail: string;
   managementEmails: string[];
+  teamsChatRecipients?: string[];
   calendarId: string;
   delivery: "disabled" | "google";
   reminderHour: number;
@@ -144,6 +145,19 @@ export function validateConfig(c: Config): Config {
       c.managementEmails?.length > 0 &&
       c.managementEmails.every((x) => email.test(x)),
     "Configure valid owner and management email addresses.",
+  );
+  const teamsRecipients = c.teamsChatRecipients;
+  const microsoftSignIn =
+    /^[a-z0-9'.!#^~_-]*[a-z0-9'!#^~_-]@[a-z0-9-]+(?:\.[a-z0-9-]+)+$/i;
+  invariant(
+    teamsRecipients === undefined ||
+      (Array.isArray(teamsRecipients) &&
+        teamsRecipients.every(
+          (x) => typeof x === "string" && microsoftSignIn.test(x),
+        ) &&
+        new Set(teamsRecipients.map((x) => x.toLowerCase())).size ===
+          teamsRecipients.length),
+    "Configure Teams chat recipients as a list of unique email-style Microsoft sign-in names.",
   );
   invariant(
     typeof c.displayName === "string" &&

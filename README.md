@@ -13,6 +13,7 @@ This is a small Google Apps Script web app. Each employee deploys an **owner-onl
 - Separate used, planned, currently available, and projected balances.
 - Standard calendar titles, absence intervals, hours, and HR accounting system status in notes.
 - Request emails defaulting to self, with management and no-email options.
+- Optional Microsoft Teams chat drafts for saved requests.
 - Weekday reminder digests with authenticated confirmation links.
 - Cancellation and HR accounting system correction tracking.
 - Private workbook import and details/balance CSV exports.
@@ -118,6 +119,18 @@ Use **Add dates** for additional date ranges in a single submission, such as thr
 Saving sends one chosen request email and creates one Calendar event per working date. All dates share a HR accounting system confirmation and reminder entry, with every date and its hours listed. Expand a request in **Your record** to see each individual date and its status. **Remove date** restores only that date's personal allowance and removes only its owned Calendar event. **Cancel all remaining dates** cancels the rest. A removal sends one update through the original email choice. Date disclosures remain open after a removal. Imported monthly summaries expand to show their month-end posting and explain that exact daily charges cannot be inferred. Dates removed after HR accounting system confirmation remain on the checklist as specific corrections; remaining dates keep their entered status. Changed hours or added dates after saving require a separate request.
 
 Request email defaults to **Email me a copy to resend**. You can instead select **Email the configured management recipients** or **No request email**. Saving always records the leave and updates Calendar; HR accounting system tracking works with all three email choices. Each request retains its recipient choice for retries and cancellation notices. A new request defaults to self again.
+
+## Send an optional Teams message
+
+To enable Teams drafts, add `teamsChatRecipients` to your private configuration, then update your deployment. Use each recipient's Microsoft work or school sign-in address. Multiple addresses open a group chat. An empty list keeps the feature off.
+
+```json
+"teamsChatRecipients": ["manager@example.edu", "backup@example.edu"]
+```
+
+After saving a request and syncing it to Staff Calendar, choose **Open Teams draft**. Review the recipients and message in Teams, then select **Send** there. The draft works with any request email choice and lists the active absence dates and times. Find it again under **Your record**. [Microsoft Teams chat links](https://learn.microsoft.com/en-us/microsoftteams/platform/concepts/build-and-test/deep-link-teams)
+
+Dayoff puts the recipients and draft text into the Teams link. For long requests, **Open Teams chat** opens the chat and you can copy the complete draft from Dayoff. You can also copy the draft into a Teams channel or use it if your Teams client opens with a blank message.
 
 ## Staff Calendar context while choosing dates
 

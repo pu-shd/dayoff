@@ -445,6 +445,12 @@
         font-size: 13px;
         margin: 12px 0 0;
       }
+      .teams-draft pre {
+        margin: 10px 0;
+        max-height: 14rem;
+        overflow: auto;
+        padding: 12px;
+      }
       .quiet-details {
         font-size: 12px;
         color: var(--muted);
@@ -814,6 +820,7 @@
                 Saving records these hours and creates the real Staff Calendar
                 entry.
               </p>
+              <div id="request-teams"></div>
             </div>
           </section>
         </section>
@@ -975,7 +982,7 @@
     <script>
       'use strict';
       const focus = <?!= focus ?>;
-      let state, pendingInput, historyYear, historyKey, historyLoad = 0, working = false, hasError = false, savedPreview = false, lookupTimer, lookupGeneration = 0, lookupKey = '', lookupPending = false, focusRevealed = false;
+      let state, pendingInput, historyYear, historyKey, historyLoad = 0, working = false, hasError = false, savedRequestId = '', lookupTimer, lookupGeneration = 0, lookupKey = '', lookupPending = false, focusRevealed = false;
       const $ = id => document.getElementById(id);
       const hrName=()=>state?.config.hrSystemName??'HR accounting system';
       const money = n => (n / 100).toFixed(2);
@@ -1007,7 +1014,7 @@
        document.querySelectorAll('button').forEach(b=>b.disabled=working);
        $('initialize').disabled=working||!state||state.initialized||state.ledgerRecoveryRequired||$('ledger-confirmation').value!=='CREATE NEW LEDGER';
        $('ledger-confirmation').disabled=working||!state||state.initialized||state.ledgerRecoveryRequired;
-       $('email-choice').disabled=working||savedPreview;
+       $('email-choice').disabled=working||!!savedRequestId;
        if (!state || working) return;
        const live = state.config.delivery==='google';
        $('install').disabled=!live; $('stop').disabled=!state.reminders.enabled;
@@ -1034,13 +1041,56 @@
        return spans.map(span=>format(span[0].date)+(span.length>1?' – '+format(span.at(-1).date):'')).join(', ');
       }
       function range(r) {return dateList(activeDays(r).length?activeDays(r):r.days);}
+      function teamsDraft(r) {
+        const { teamsChatRecipients: recipients, delivery, timeZone } = state.config;
+        if (delivery !== 'google' || !recipients?.length || r.legacy || r.calendar !== 'done') return null;
+        const days = activeDays(r);
+        if (!days.length) return null;
+        const dates = days.map(d => d.allDay ? d.date : `${d.date}, ${d.start}–${d.end}`);
+        const lines = ['Hi, here are my out-of-office dates.', '', ...dates];
+        if (days.some(d => !d.allDay)) lines.push('', `Times are in ${timeZone}.`);
+        const draft = lines.join('\n');
+
+        const users = recipients.map(encodeURIComponent).join(',');
+        const chatUrl = 'https://teams.microsoft.com/l/chat/0/0?users=' + users;
+        const draftUrl = chatUrl + '&message=' + encodeURIComponent(draft);
+        const canPrefill = draftUrl.length <= 2000;
+        const link = text('a', canPrefill ? 'Open Teams draft' : 'Open Teams chat', 'button');
+        link.setAttribute('href', canPrefill ? draftUrl : chatUrl);
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+
+        const instructions = canPrefill
+          ? 'Review and send in Teams. Copy the text above if Teams opens with a blank message.'
+          : 'Copy the text above into Teams, then send it there.';
+        const details = text('details', '', 'quiet-details teams-draft');
+        details.append(
+          text('summary', 'Teams message'),
+          text('p', 'Chat with ' + recipients.join(', ')),
+          text('pre', draft, 'draft'),
+          link,
+          text('p', instructions),
+        );
+        return details;
+      }
+      function renderSavedTeams() {
+        const target = $('request-teams');
+        const open = target.querySelector('details')?.open ?? true;
+        const record = state.records.find(r => r.id === savedRequestId);
+        const details = record && teamsDraft(record);
+        target.replaceChildren();
+        if (details) {
+          details.open = open;
+          target.append(details);
+        }
+      }
       function confirmEntry(r,trigger) {
        const correction=r.calm==='correction';
        if(confirm((correction?'Have you corrected the cancelled leave':'Have you entered this leave')+` in ${hrName()}?\n\n`+dateList(calmDays(r))+'\n'+cap(r.input.category)+' · '+money(calmDays(r).reduce((n,d)=>n+d.hours,0))+' hours'))
         action('confirmCalm',trigger,r.id,r.version);
       }
       function renderPreview(r) {
-       savedPreview=false;clearFeedback(feedbackAt($('send')));$('preview-status').textContent='Not submitted';$('preview-eyebrow').textContent='Review before saving';$('preview-save-note').classList.remove('hide');
+       savedRequestId='';$('request-teams').replaceChildren();clearFeedback(feedbackAt($('send')));$('preview-status').textContent='Not submitted';$('preview-eyebrow').textContent='Review before saving';$('preview-save-note').classList.remove('hide');
        $('preview').setAttribute('data-category',r.input.category);
        $('preview-title').textContent=cap(r.input.category)+' leave';
        $('preview-date').textContent=range(r);
@@ -1174,14 +1224,16 @@
          if(r.calendar==='pending'||r.email==='pending')controls.append(button('Retry incomplete steps',event=>action('retryRequest',event.currentTarget,r.id)));
          if(r.email==='unknown'||r.email==='sending')controls.append(button('Confirm email received',event=>{if(confirm('Confirm receipt or an administrator-verified delivery trace.'))action('resolveEmail',event.currentTarget,r.id,r.version,true);}));
          if(remaining.length)controls.append(button('Cancel all remaining dates',event=>{if(confirm(`Cancel all remaining dates in this request and remove their Calendar events? Any ${hrName()} corrections stay on your checklist.`))action('cancelRequest',event.currentTarget,r.id,r.version);},'danger'));
+         const teams=teamsDraft(r);if(teams)controls.append(teams);
         }
         row.append(controls);tbody.append(row);
        }
        for(const input of document.querySelectorAll('[name=first],[name=last]')){input.min=s.fiscalPeriod.start;input.max=s.fiscalPeriod.end;}
        renderHistory(s.history);
+       renderSavedTeams();
        enabled();
       }
-      function invalidate(){for(const row of dateRows())validateDateRow(row);queueStaffLookup();if(savedPreview){$('email-choice').value='self';savedPreview=false;}pendingInput=null;$('preview').classList.add('hide');clearFeedback(feedbackAt($('send')));enabled();}
+      function invalidate(){for(const row of dateRows())validateDateRow(row);queueStaffLookup();if(savedRequestId){$('email-choice').value='self';savedRequestId='';$('request-teams').replaceChildren();}pendingInput=null;$('preview').classList.add('hide');clearFeedback(feedbackAt($('send')));enabled();}
       const dateRows=()=>[...$('date-rows').querySelectorAll('.date-row')];
       function updateRows(){
        const rows=dateRows();$('add-dates').disabled=working || rows.length>=32;
@@ -1241,7 +1293,7 @@
       function rowInput(row){if(!row.querySelector('[name=last]').value)defaultLastDate(row);return Object.fromEntries([...row.querySelectorAll('[name]')].map(field=>[field.name,field.value]));}
       $('request-form').addEventListener('input',invalidate);
       $('request-form').addEventListener('submit',async e=>{
-       e.preventDefault();const feedback=feedbackAt(document.querySelector('#request-form button[type=submit]'));clearFeedback(feedback);const refreshLookup=savedPreview;if(savedPreview)$('email-choice').value='self';queueStaffLookup(refreshLookup);busy(true);
+       e.preventDefault();const feedback=feedbackAt(document.querySelector('#request-form button[type=submit]'));clearFeedback(feedback);const refreshLookup=!!savedRequestId;if(savedRequestId)$('email-choice').value='self';queueStaffLookup(refreshLookup);busy(true);
        const ranges=dateRows().map(rowInput);pendingInput={...ranges[0],ranges,category:document.querySelector('[name=category]').value,id:crypto.randomUUID(),emailTo:$('email-choice').value};
        try{renderPreview(await rpc('preview',pendingInput));message('');}
        catch(err){invalidate();notify(feedback,err.message,true);}finally{busy(false);}
@@ -1254,7 +1306,7 @@
        if(!pendingInput)return;const id=pendingInput.id,trigger=event.currentTarget;
        const ok=await action('createRequest',trigger,pendingInput);
        if(ok || state.records.some(r=>r.id===id)){
-        pendingInput=null;savedPreview=true;$('preview').classList.remove('hide');$('preview-status').textContent=ok?'Saved':'Action needed';$('preview-eyebrow').textContent=ok?'Saved request':'Recorded request';$('send').textContent=ok?'Request saved':'Request recorded';$('preview-save-note').classList.add('hide');enabled();
+        pendingInput=null;savedRequestId=id;$('preview').classList.remove('hide');$('preview-status').textContent=ok?'Saved':'Action needed';$('preview-eyebrow').textContent=ok?'Saved request':'Recorded request';$('send').textContent=ok?'Request saved':'Request recorded';$('preview-save-note').classList.add('hide');renderSavedTeams();enabled();
        }
        if(ok)notify(feedbackAt(trigger),'Request saved and Calendar updated. '+(state.records.find(r=>r.id===id)?.email==='skipped'?'No request email was sent.':'Your chosen request email was sent.')+` ${hrName()} entry remains on your checklist.`);
       });

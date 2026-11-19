@@ -394,6 +394,7 @@ export function initializeInstance(
     "displayName",
     "ownerEmail",
     "managementEmails",
+    "teamsChatRecipients",
     "calendarId",
     "delivery",
     "reminderHour",
